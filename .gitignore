@@ -1,0 +1,16 @@
+# Python
+backend/.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Secrets / local config
+backend/.env
+backend/.enc_key
+
+# Node
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
