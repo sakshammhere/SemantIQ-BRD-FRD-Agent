@@ -1,0 +1,24 @@
+# --- Web layer ---
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-dotenv>=1.0
+pydantic>=2.6
+
+# --- Supabase (auth verification + data access on behalf of the user) ---
+supabase>=2.7
+
+# --- Secrets at rest (LLM keys, platform credentials) ---
+cryptography>=42.0
+
+# --- LLM providers ---
+openai>=1.30          # also used for Groq and Gemini via their OpenAI-compatible endpoints
+anthropic>=0.34        # Claude uses its own SDK/message format
+
+# --- Real document generation (BRD/FRD as .docx, Dictionary/Mapping as .xlsx) ---
+python-docx>=1.1
+openpyxl>=3.1
+
+# --- Real platform connectors (read-only schema introspection) ---
+snowflake-connector-python>=3.11
+databricks-sql-connector>=3.4
+boto3>=1.34
