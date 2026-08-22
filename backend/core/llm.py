@@ -87,3 +87,80 @@ _EXCLUDE_SUBSTRINGS = (
 )
 
 
+def list_models(provider: str, api_key: str) -> list[str]:
+    """Return the chat-capable model ids actually available to this key.
+
+    Raises LLMError if the key is invalid or the provider can't be reached —
+    this call doubles as the live "test connection" check.
+    """
+    provider = (provider or "").strip().lower()
+    api_key = (api_key or "").strip()
+    if provider not in SUPPORTED_PROVIDERS:
+        raise LLMError(f"Unknown provider '{provider}'.")
+    if not api_key:
+        raise LLMError("No API key provided.")
+
+    try:
+        if provider == "anthropic":
+            ids = _list_models_anthropic(api_key)
+        elif provider == "gemini":
+            ids = _list_models_gemini(api_key)
+        else:
+            ids = _list_models_openai_compatible(provider, api_key)
+    except LLMError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        fatal, message = _diagnose(exc)
+        raise LLMError(message if fatal else f"Could not reach {provider}: {message}") from exc
+
+    filtered = [m for m in ids if not any(bad in m.lower() for bad in _EXCLUDE_SUBSTRINGS)]
+    if not filtered:
+        raise LLMError("Your key is valid, but no chat-capable models were found on this account.")
+    return filtered
+
+
+def _list_models_openai_compatible(provider: str, api_key: str) -> list[str]:
+    from openai import OpenAI
+
+    kwargs: Dict[str, Any] = {"api_key": api_key, "timeout": 30, "max_retries": 1}
+    base_url = PROVIDER_BASE_URLS.get(provider)
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = OpenAI(**kwargs)
+    models = list(client.models.list())
+    # Newer models tend to have a later `created` timestamp — surface them first.
+    models.sort(key=lambda m: getattr(m, "created", 0) or 0, reverse=True)
+    return [m.id for m in models]
+
+
+def _list_models_anthropic(api_key: str) -> list[str]:
+    from anthropic import Anthropic
+
+    client = Anthropic(api_key=api_key, timeout=30)
+    result = client.models.list()
+    return [m.id for m in result.data]
+
+
+def _list_models_gemini(api_key: str) -> list[str]:
+    import urllib.error
+    import urllib.request
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"HTTPError {exc.code}: {body[:300]}") from exc
+
+    ids = []
+    for entry in payload.get("models", []):
+        methods = entry.get("supportedGenerationMethods", [])
+        if "generateContent" not in methods:
+            continue
+        name = entry.get("name", "")
+        ids.append(name.split("/", 1)[1] if "/" in name else name)
+    return ids
+
+
