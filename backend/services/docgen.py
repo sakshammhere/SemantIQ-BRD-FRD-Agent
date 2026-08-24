@@ -243,3 +243,81 @@ def build_brd_docx(doc_json: Dict[str, Any], meta: Dict[str, Any]) -> bytes:
     return buf.getvalue()
 
 
+def build_frd_docx(doc_json: Dict[str, Any], meta: Dict[str, Any]) -> bytes:
+    doc = _new_doc()
+    _cover(doc, doc_json.get("kicker", "FRD"), doc_json.get("title", "Functional Requirements Document"), meta)
+
+    _heading(doc, "01 · Introduction")
+    _para(doc, doc_json.get("introduction", ""))
+
+    _heading(doc, "02 · System Overview")
+    _para(doc, doc_json.get("system_overview", ""))
+
+    _heading(doc, "03 · Functional Modules")
+    for mi, module in enumerate(doc_json.get("modules", []), start=1):
+        _heading(doc, f"Module {mi} · {module.get('name', '')}", level=2, color=VIOLET)
+        _para(doc, module.get("description", ""), color=MUTED)
+        for story in module.get("stories", []):
+            p = doc.add_paragraph()
+            r = p.add_run(f"{story.get('id', '')}  ")
+            r.font.bold = True
+            r.font.size = Pt(10.5)
+            r.font.color.rgb = TEAL
+            r2 = p.add_run(story.get("story", ""))
+            r2.font.size = Pt(10.5)
+            r3 = p.add_run(f"   [{_priority_label(story.get('priority', ''))}]")
+            r3.font.size = Pt(8.5)
+            r3.font.bold = True
+            r3.font.color.rgb = AMBER
+            p.space_after = Pt(2)
+            for crit in story.get("acceptance_criteria", []):
+                cp = doc.add_paragraph(style="List Bullet 2")
+                cr = cp.add_run(str(crit))
+                cr.font.size = Pt(9.5)
+                cr.font.color.rgb = MUTED
+            doc.add_paragraph().space_after = Pt(2)
+
+    _heading(doc, "04 · Non-Functional Requirements")
+    nfr = doc_json.get("non_functional_requirements", [])
+    if nfr:
+        _table(doc, ["Category", "Requirement"], [[n.get("category", ""), n.get("requirement", "")] for n in nfr], widths=[1.5, 5.2])
+
+    _heading(doc, "05 · Data Requirements")
+    dr = doc_json.get("data_requirements", [])
+    if dr:
+        _table(doc, ["Entity", "Fields", "Notes"],
+               [[d.get("entity", ""), ", ".join(d.get("fields", [])), d.get("notes", "")] for d in dr],
+               widths=[1.6, 2.8, 2.3])
+
+    _heading(doc, "06 · Traceability Matrix")
+    tr = doc_json.get("traceability", [])
+    if tr:
+        _table(doc, ["Business Requirement", "Functional Requirement"],
+               [[t.get("business_requirement", ""), t.get("functional_requirement", "")] for t in tr],
+               widths=[3.0, 3.0])
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+# =====================================================================  XLSX
+
+_HEADER_FILL = PatternFill(start_color=TEAL_HEX, end_color=TEAL_HEX, fill_type="solid")
+_HEADER_FONT = Font(color="FFFFFF", bold=True, size=10)
+_TITLE_FONT = Font(color=INK_HEX, bold=True, size=16)
+_SUB_FONT = Font(color="708080", italic=True, size=10)
+_THIN = Side(style="thin", color=LINE_HEX)
+_BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+_STATUS_FILL = {
+    "Matched": PatternFill(start_color=TEAL_SOFT_HEX, end_color=TEAL_SOFT_HEX, fill_type="solid"),
+    "Renamed": PatternFill(start_color=AMBER_SOFT_HEX, end_color=AMBER_SOFT_HEX, fill_type="solid"),
+    "Missing": PatternFill(start_color=RED_SOFT_HEX, end_color=RED_SOFT_HEX, fill_type="solid"),
+}
+_STATUS_FONT = {
+    "Matched": Font(color=TEAL_HEX, bold=True, size=9.5),
+    "Renamed": Font(color=AMBER_HEX, bold=True, size=9.5),
+    "Missing": Font(color=RED_HEX, bold=True, size=9.5),
+}
+
+
