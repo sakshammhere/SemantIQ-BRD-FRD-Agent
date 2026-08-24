@@ -321,3 +321,125 @@ _STATUS_FONT = {
 }
 
 
+def _sheet_title(ws: Worksheet, title: str, subtitle: str, cols: int) -> int:
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max(cols, 1))
+    c = ws.cell(row=1, column=1, value=title)
+    c.font = _TITLE_FONT
+    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max(cols, 1))
+    c2 = ws.cell(row=2, column=1, value=subtitle)
+    c2.font = _SUB_FONT
+    return 4  # first header row
+
+
+def _write_table(ws: Worksheet, start_row: int, headers: List[str], rows: List[List[Any]], widths: List[int]) -> None:
+    for j, h in enumerate(headers, start=1):
+        cell = ws.cell(row=start_row, column=j, value=h)
+        cell.font = _HEADER_FONT
+        cell.fill = _HEADER_FILL
+        cell.alignment = Alignment(vertical="center")
+        cell.border = _BORDER
+    for i, row in enumerate(rows, start=start_row + 1):
+        for j, val in enumerate(row, start=1):
+            cell = ws.cell(row=i, column=j, value=val)
+            cell.border = _BORDER
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            if headers[j - 1] == "Status" and val in _STATUS_FILL:
+                cell.fill = _STATUS_FILL[val]
+                cell.font = _STATUS_FONT[val]
+    for j, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(j)].width = w
+    ws.freeze_panes = ws.cell(row=start_row + 1, column=1)
+
+
+def build_dictionary_xlsx(doc_json: Dict[str, Any], meta: Dict[str, Any]) -> bytes:
+    wb = Workbook()
+    summary = doc_json.get("summary", {})
+
+    ws = wb.active
+    ws.title = "Summary"
+    row = _sheet_title(ws, "Semantic Data Dictionary", f"Prepared from {meta.get('source_label', '')} on {meta.get('generated_date', '')}", 2)
+    _write_table(ws, row, ["Metric", "Count"], [
+        ["Tables", summary.get("tables", 0)],
+        ["Columns", summary.get("columns", 0)],
+        ["Measures", summary.get("measures", 0)],
+        ["Relationships", summary.get("relationships", 0)],
+    ], [24, 12])
+
+    ws2 = wb.create_sheet("Tables & Columns")
+    row2 = _sheet_title(ws2, "Tables & Columns", "One row per column, grouped by table", 5)
+    rows = []
+    for t in doc_json.get("tables", []):
+        for c in t.get("columns", []):
+            rows.append([t.get("name", ""), t.get("purpose", ""), c.get("name", ""), c.get("type", ""), "Yes" if c.get("key") else "", c.get("description", "")])
+    _write_table(ws2, row2, ["Table", "Table Purpose", "Column", "Type", "Key", "Column Description"], rows, [18, 34, 20, 14, 6, 34])
+
+    ws3 = wb.create_sheet("Measures")
+    row3 = _sheet_title(ws3, "Measures & KPIs", "Every DAX measure defined in the source model", 3)
+    m_rows = [[m.get("name", ""), m.get("expression", ""), m.get("description", "")] for m in doc_json.get("measures", [])]
+    _write_table(ws3, row3, ["Measure", "DAX Expression", "Business Description"], m_rows, [22, 40, 40])
+
+    ws4 = wb.create_sheet("Relationships")
+    row4 = _sheet_title(ws4, "Relationships", "Joins between tables in the source model", 3)
+    r_rows = [[r.get("from", ""), r.get("to", ""), r.get("cardinality", "")] for r in doc_json.get("relationships", [])]
+    _write_table(ws4, row4, ["From", "To", "Cardinality"], r_rows, [26, 26, 18])
+
+    ws5 = wb.create_sheet("Glossary")
+    row5 = _sheet_title(ws5, "Business Glossary", "Terms used across this documentation set", 2)
+    g_rows = [[g.get("term", ""), g.get("definition", "")] for g in doc_json.get("glossary", [])]
+    _write_table(ws5, row5, ["Term", "Definition"], g_rows, [22, 60])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def build_mapping_xlsx(doc_json: Dict[str, Any], meta: Dict[str, Any]) -> bytes:
+    wb = Workbook()
+    summary = doc_json.get("summary", {})
+
+    ws = wb.active
+    ws.title = "Summary"
+    row = _sheet_title(ws, "Integration Mapping Report", f"Power BI → {doc_json.get('platform', '')} · estimate pending live catalog comparison", 2)
+    _write_table(ws, row, ["Metric", "Value"], [
+        ["Target platform", doc_json.get("platform", "")],
+        ["Mapped (Matched + Renamed)", f"{doc_json.get('mapped_pct', 0)}%"],
+        ["Total fields", summary.get("total", 0)],
+        ["Matched", summary.get("matched", 0)],
+        ["Renamed", summary.get("renamed", 0)],
+        ["Missing / needs review", summary.get("missing", 0)],
+    ], [30, 20])
+
+    ws2 = wb.create_sheet("Table Mapping")
+    row2 = _sheet_title(ws2, "Table Mapping", "Source table → physical target table", 3)
+    t_rows = [[t.get("source_table", ""), t.get("target_table", ""), t.get("type", "")] for t in doc_json.get("table_mappings", [])]
+    _write_table(ws2, row2, ["Source Table", "Target Table", "Type"], t_rows, [22, 26, 14])
+
+    ws3 = wb.create_sheet("Field Mapping")
+    row3 = _sheet_title(ws3, "Field Mapping", "Every source column, one row each", 7)
+    f_rows = [[
+        f.get("source_table", ""), f.get("source_column", ""), f.get("source_type", ""),
+        f.get("target_table", ""), f.get("target_column", ""), f.get("status", ""), f.get("note", ""),
+    ] for f in doc_json.get("field_mappings", [])]
+    _write_table(ws3, row3, ["Source Table", "Source Column", "Source Type", "Target Table", "Target Column", "Status", "Note"], f_rows, [18, 18, 12, 22, 22, 12, 34])
+
+    ws4 = wb.create_sheet("Relationships")
+    row4 = _sheet_title(ws4, "Relationship Mapping", "Source joins → target join conditions", 3)
+    rel_rows = [[r.get("source", ""), r.get("target_join", ""), r.get("cardinality", "")] for r in doc_json.get("relationship_mappings", [])]
+    _write_table(ws4, row4, ["Source", "Target Join", "Cardinality"], rel_rows, [30, 40, 16])
+
+    ws5 = wb.create_sheet("Measures")
+    row5 = _sheet_title(ws5, "Measure Mapping", "DAX measures to re-derive on the target platform", 3)
+    meas_rows = [[m.get("measure", ""), m.get("dax", ""), m.get("note", "")] for m in doc_json.get("measure_mappings", [])]
+    _write_table(ws5, row5, ["Measure", "Source DAX", "Target Notes"], meas_rows, [22, 36, 40])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+DOC_BUILDERS = {
+    "brd": ("docx", build_brd_docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "frd": ("docx", build_frd_docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    "dictionary": ("xlsx", build_dictionary_xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "mapping": ("xlsx", build_mapping_xlsx, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+}
