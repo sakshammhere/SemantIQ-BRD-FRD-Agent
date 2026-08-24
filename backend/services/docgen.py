@@ -171,3 +171,75 @@ def _priority_label(p: str) -> str:
     return {"Must": "MUST HAVE", "Should": "SHOULD HAVE", "Could": "COULD HAVE"}.get(p, p or "—")
 
 
+def build_brd_docx(doc_json: Dict[str, Any], meta: Dict[str, Any]) -> bytes:
+    doc = _new_doc()
+    _cover(doc, doc_json.get("kicker", "BRD"), doc_json.get("title", "Business Requirements Document"), meta)
+
+    _heading(doc, "01 · Executive Summary")
+    _para(doc, doc_json.get("executive_summary", ""))
+
+    _heading(doc, "02 · Business Background")
+    _para(doc, doc_json.get("business_background", ""))
+
+    _heading(doc, "03 · Business Objectives")
+    objs = doc_json.get("objectives", [])
+    if objs:
+        _table(doc, ["ID", "Objective", "Success Metric"],
+               [[o.get("id", ""), o.get("statement", ""), o.get("success_metric", "")] for o in objs],
+               widths=[0.7, 3.5, 2.5])
+
+    _heading(doc, "04 · Stakeholders")
+    sh = doc_json.get("stakeholders", [])
+    if sh:
+        _table(doc, ["Role", "Responsibility", "Interest"],
+               [[s.get("role", ""), s.get("responsibility", ""), s.get("interest", "")] for s in sh],
+               widths=[1.8, 2.7, 2.2])
+
+    _heading(doc, "05 · Current State vs. Future State")
+    _heading(doc, "Current State", level=2, color=MUTED)
+    _para(doc, doc_json.get("current_state", ""))
+    _heading(doc, "Future State", level=2, color=TEAL)
+    _para(doc, doc_json.get("future_state", ""))
+
+    _heading(doc, "06 · Scope")
+    _heading(doc, "In Scope", level=2, color=TEAL)
+    _bullets(doc, doc_json.get("in_scope", []))
+    _heading(doc, "Out of Scope", level=2, color=AMBER)
+    _bullets(doc, doc_json.get("out_of_scope", []))
+
+    _heading(doc, "07 · Business Requirements")
+    reqs = doc_json.get("requirements", [])
+    themes = list(dict.fromkeys(r.get("theme", "General") for r in reqs)) or ["General"]
+    for theme in themes:
+        _heading(doc, theme, level=2, color=VIOLET)
+        theme_reqs = [r for r in reqs if r.get("theme", "General") == theme]
+        _table(doc, ["ID", "Requirement", "Priority", "Rationale"],
+               [[r.get("id", ""), r.get("description", ""), _priority_label(r.get("priority", "")), r.get("rationale", "")] for r in theme_reqs],
+               widths=[0.7, 2.6, 1.0, 2.4])
+
+    _heading(doc, "08 · Assumptions & Constraints")
+    _heading(doc, "Assumptions", level=2, color=MUTED)
+    _bullets(doc, doc_json.get("assumptions", []))
+    _heading(doc, "Constraints", level=2, color=MUTED)
+    _bullets(doc, doc_json.get("constraints", []))
+
+    _heading(doc, "09 · Risks & Mitigations")
+    risks = doc_json.get("risks", [])
+    if risks:
+        _table(doc, ["Risk", "Impact", "Mitigation"],
+               [[r.get("risk", ""), r.get("impact", ""), r.get("mitigation", "")] for r in risks],
+               widths=[2.5, 1.0, 3.2])
+
+    _heading(doc, "10 · Success Criteria")
+    _bullets(doc, doc_json.get("success_criteria", []))
+
+    _heading(doc, "11 · Glossary")
+    gl = doc_json.get("glossary", [])
+    if gl:
+        _table(doc, ["Term", "Definition"], [[g.get("term", ""), g.get("definition", "")] for g in gl], widths=[1.8, 4.9])
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
