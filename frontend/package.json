@@ -1,0 +1,11 @@
+{
+  "name": "semantiq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SemantIQ — polished frontend demo for generating semantic model documentation.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check app.js && node --check lib/api.js && node --check lib/auth.js && node --check lib/backend.js && node --check lib/types.js"
+  }
+}
