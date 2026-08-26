@@ -448,3 +448,92 @@ function integrationsPage() {
   </div>`;
 }
 
+const PROVIDER_META = {
+  openai: { label: "OpenAI", placeholder: "sk-...", model: "gpt-4o-mini", link: "https://platform.openai.com/api-keys", linkLabel: "platform.openai.com/api-keys" },
+  groq: { label: "Groq", placeholder: "gsk_...", model: "llama-3.3-70b-versatile", link: "https://console.groq.com/keys", linkLabel: "console.groq.com/keys" },
+  gemini: { label: "Gemini", placeholder: "AIza...", model: "gemini-2.0-flash", link: "https://aistudio.google.com/apikey", linkLabel: "aistudio.google.com/apikey" },
+  anthropic: { label: "Claude", placeholder: "sk-ant-...", model: "claude-3-5-sonnet-latest", link: "https://console.anthropic.com/settings/keys", linkLabel: "console.anthropic.com/settings/keys" }
+};
+const providerLabel = (id) => PROVIDER_META[id]?.label || id;
+
+const PLATFORM_META = {
+  snowflake: {
+    label: "Snowflake",
+    fields: [
+      { key: "account", label: "Account identifier", placeholder: "xy12345.us-east-1" },
+      { key: "user", label: "Username", placeholder: "SVC_USER" },
+      { key: "password", label: "Password", placeholder: "••••••••", type: "password" },
+      { key: "warehouse", label: "Warehouse", placeholder: "COMPUTE_WH" },
+      { key: "database", label: "Database", placeholder: "ANALYTICS" },
+      { key: "schema", label: "Schema", placeholder: "PUBLIC" },
+      { key: "role", label: "Role (optional)", placeholder: "SYSADMIN" }
+    ]
+  },
+  databricks: {
+    label: "Databricks",
+    fields: [
+      { key: "server_hostname", label: "Server hostname", placeholder: "adb-xxxx.azuredatabricks.net" },
+      { key: "http_path", label: "HTTP path", placeholder: "/sql/1.0/warehouses/xxxx" },
+      { key: "access_token", label: "Access token", placeholder: "dapi...", type: "password" },
+      { key: "catalog", label: "Catalog", placeholder: "main" },
+      { key: "schema", label: "Schema", placeholder: "default" }
+    ]
+  },
+  aws: {
+    label: "AWS",
+    fields: [
+      { key: "aws_access_key_id", label: "Access key ID", placeholder: "AKIA..." },
+      { key: "aws_secret_access_key", label: "Secret access key", placeholder: "••••••••", type: "password" },
+      { key: "region", label: "Region", placeholder: "us-east-1" },
+      { key: "glue_database", label: "Glue database", placeholder: "analytics_db" }
+    ]
+  }
+};
+const platformLabel = (id) => PLATFORM_META[id]?.label || id;
+const isPlatformConnected = (id) => state.connections.some((c) => c.platform === id);
+
+const AGENT_TOOL_META = {
+  list_projects: { category: "read", label: "List your projects" },
+  get_project: { category: "read", label: "Open project details" },
+  get_document: { category: "read", label: "Read a document" },
+  get_workspace_status: { category: "read", label: "Check connection status" },
+  get_model_diagram: { category: "read", label: "Render a relationship diagram" },
+  generate_documentation: { category: "write", label: "Generate a new project" },
+  edit_project_context: { category: "write", label: "Edit project context" },
+  regenerate_documents: { category: "write", label: "Regenerate documents" },
+  create_share_link: { category: "write", label: "Create a share link" },
+  download_document: { category: "write", label: "Download a document" },
+  navigate: { category: "write", label: "Navigate the app" },
+  delete_project: { category: "destructive", label: "Delete a project" },
+  sign_out: { category: "destructive", label: "Sign out" }
+};
+const READ_TOOL_NAMES = Object.keys(AGENT_TOOL_META).filter((k) => AGENT_TOOL_META[k].category === "read");
+const projectLabel = (id) => state.agentProjectNames[id] || id;
+
+function summarizeToolCall(name, args) {
+  switch (name) {
+    case "list_projects": return "List your saved projects";
+    case "get_project": return `Open "${projectLabel(args.project_id)}"`;
+    case "get_document": return `Read the ${(args.doc_type || "").toUpperCase()} for "${projectLabel(args.project_id)}"`;
+    case "get_workspace_status": return "Check which providers/connections are active";
+    case "get_model_diagram": return args.project_id ? `Render the relationship diagram for "${projectLabel(args.project_id)}"` : "Render the relationship diagram for the attached model";
+    case "generate_documentation": return `Generate a new project "${args.name}" for ${args.platform}`;
+    case "edit_project_context": return `Edit "${projectLabel(args.project_id)}"${args.name ? ` → rename to "${args.name}"` : ""}`;
+    case "regenerate_documents": return `Regenerate documents for "${projectLabel(args.project_id)}"`;
+    case "create_share_link": return `Create a public share link for "${projectLabel(args.project_id)}"`;
+    case "download_document": return `Download the ${(args.doc_type || "").toUpperCase()} for "${projectLabel(args.project_id)}"`;
+    case "navigate": return `Go to ${args.view}`;
+    case "delete_project": return `Permanently delete "${projectLabel(args.project_id)}"`;
+    case "sign_out": return "Sign you out of SemantIQ";
+    default: return name;
+  }
+}
+
+function cacheAgentToolNames(name, args, outcome) {
+  if (name === "list_projects" && Array.isArray(outcome)) {
+    outcome.forEach((p) => { if (p.id) state.agentProjectNames[p.id] = p.name; });
+  } else if (outcome && outcome.id && outcome.name) {
+    state.agentProjectNames[outcome.id] = outcome.name;
+  }
+}
+
