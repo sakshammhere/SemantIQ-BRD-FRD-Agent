@@ -537,3 +537,137 @@ function cacheAgentToolNames(name, args, outcome) {
   }
 }
 
+function mermaidId(name) {
+  const cleaned = String(name || "").replace(/[^a-zA-Z0-9_]/g, "_");
+  return /^[0-9]/.test(cleaned) ? `T_${cleaned}` : cleaned || "Table";
+}
+
+const CARDINALITY_TO_MERMAID = {
+  "many-to-one": "}o--||",
+  "one-to-many": "||--o{",
+  "one-to-one": "||--||",
+  "many-to-many": "}o--o{"
+};
+
+function buildRelationshipMermaid(model) {
+  const tables = model?.tables || [];
+  const relationships = model?.relationships || [];
+  const lines = ["erDiagram"];
+  if (relationships.length) {
+    relationships.forEach((r) => {
+      const fromTable = (r.from || "").split(".")[0];
+      const toTable = (r.to || "").split(".")[0];
+      if (!fromTable || !toTable) return;
+      const notation = CARDINALITY_TO_MERMAID[(r.cardinality || "").toLowerCase()] || "||--o{";
+      lines.push(`    ${mermaidId(fromTable)} ${notation} ${mermaidId(toTable)} : "${(r.from || "").replace(/"/g, "")} to ${(r.to || "").replace(/"/g, "")}"`);
+    });
+  } else {
+    tables.forEach((t) => lines.push(`    ${mermaidId(t.name)} { string note "no relationships defined" }`));
+  }
+  return lines.join("\n");
+}
+
+async function executeAgentTool(name, args) {
+  switch (name) {
+    case "list_projects": {
+      const rows = await listProjects();
+      return rows.map((p) => ({ id: p.id, name: p.name, platform: p.platform, status: p.status, updated_at: p.updated_at }));
+    }
+    case "get_project": {
+      const { project, docs } = await getProjectWithDocuments(args.project_id);
+      return {
+        id: project.id, name: project.name, platform: project.platform, status: project.status,
+        source_model: project.source_model, objective: project.objective, audience: project.audience,
+        scope_in: project.scope_in, scope_out: project.scope_out,
+        has_saved_model: Boolean(project.model_snapshot), document_types: Object.keys(docs)
+      };
+    }
+    case "get_document": {
+      const { docs } = await getProjectWithDocuments(args.project_id);
+      return docs[args.doc_type] || { error: `No ${args.doc_type} document found for this project.` };
+    }
+    case "get_workspace_status": {
+      const keys = state.apiKeysLoaded ? state.apiKeys : await listApiKeys();
+      const conns = state.connectionsLoaded ? state.connections : await listConnections();
+      return { ai_providers_connected: keys.map((k) => k.provider), platform_connections: conns.map((c) => c.platform) };
+    }
+    case "get_model_diagram": {
+      let model = state.agentModelContext;
+      let label = state.agentModelLabel || "attached model";
+      if (args.project_id) {
+        const { project } = await getProjectWithDocuments(args.project_id);
+        if (!project.model_snapshot) throw new Error("This project has no saved model to diagram.");
+        model = project.model_snapshot;
+        label = project.name;
+      }
+      if (!model) throw new Error("No semantic model is attached to this conversation. Ask the user to attach one first.");
+      const mermaidSyntax = buildRelationshipMermaid(model);
+      state.agentMessages.push({ role: "diagram", mermaid: mermaidSyntax, title: `${label} — table relationships` });
+      return { rendered: true, tables: (model.tables || []).length, relationships: (model.relationships || []).length };
+    }
+    case "generate_documentation": {
+      if (!state.agentModelContext) throw new Error("No semantic model is attached to this conversation. Ask the user to attach one with the + button first.");
+      const businessContext = { projectName: args.name, objective: args.objective, audience: args.audience, scopeIn: args.scope_in, scopeOut: args.scope_out };
+      const generated = await generateDocuments({ modelContext: state.agentModelContext, businessContext, platform: args.platform, provider: state.agentProvider });
+      const project = await createProjectWithDocuments({
+        name: args.name, sourceModel: `Power BI · ${state.agentModelLabel || "attached model"}`, platform: args.platform,
+        docs: generated.docs, modelSnapshot: state.agentModelContext, sourceFilePath: null,
+        objective: args.objective, audience: args.audience, scopeIn: args.scope_in, scopeOut: args.scope_out
+      });
+      return { id: project.id, name: project.name, platform: project.platform, documents: Object.keys(generated.docs), suggested_kpis: generated.suggested_kpis || [] };
+    }
+    case "edit_project_context": {
+      const updated = await updateProject(args.project_id, {
+        name: args.name, objective: args.objective, audience: args.audience,
+        scopeIn: args.scope_in, scopeOut: args.scope_out, platform: args.platform
+      });
+      return { id: updated.id, name: updated.name, updated_fields: Object.keys(args).filter((k) => k !== "project_id" && args[k] != null) };
+    }
+    case "regenerate_documents": {
+      const { project } = await getProjectWithDocuments(args.project_id);
+      if (!project.model_snapshot) throw new Error("This project has no saved model to regenerate from.");
+      const businessContext = { projectName: project.name, objective: project.objective, audience: project.audience, scopeIn: project.scope_in, scopeOut: project.scope_out };
+      const generated = await generateDocuments({ modelContext: project.model_snapshot, businessContext, platform: project.platform, provider: state.agentProvider });
+      await replaceProjectDocuments(args.project_id, generated.docs);
+      return { id: args.project_id, name: project.name, documents: Object.keys(generated.docs), suggested_kpis: generated.suggested_kpis || [] };
+    }
+    case "create_share_link": {
+      const token = await enableShare(args.project_id);
+      return { share_url: `${location.origin}${location.pathname}?share=${token}` };
+    }
+    case "download_document": {
+      const { blob, filename } = await downloadDocumentFile(args.project_id, args.doc_type);
+      const anchor = document.createElement("a");
+      anchor.href = URL.createObjectURL(blob); anchor.download = filename;
+      document.body.appendChild(anchor); anchor.click(); anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(anchor.href), 500);
+      return { downloaded: filename };
+    }
+    case "navigate": {
+      const view = args.view;
+      state.view = view;
+      if (view === "wizard") state.step = 1;
+      render();
+      if (view === "dashboard") paintProjects();
+      if (view === "settings") { loadApiKeys(); loadConnections(); }
+      return { navigated_to: view };
+    }
+    case "delete_project": {
+      await deleteProject(args.project_id);
+      state.projectsCache = state.projectsCache.filter((p) => p.id !== args.project_id);
+      return { deleted_project_id: args.project_id };
+    }
+    case "sign_out": {
+      await signOut();
+      state.apiKeys = []; state.apiKeysLoaded = false;
+      state.connections = []; state.connectionsLoaded = false;
+      state.projectsCache = []; state.projectsCacheLoaded = false;
+      return { signed_out: true };
+    }
+    default:
+      throw new Error(`Unknown tool '${name}'.`);
+  }
+}
+
+let pendingApprovalResolve = null;
+
