@@ -241,3 +241,119 @@ function render() {
   bindEvents();
 }
 
+function authPage() {
+  const isSignIn = state.authMode === "signin";
+  return `<div class="auth-shell">
+    <div class="auth-form-side"><div class="auth-form-inner">
+      <div class="auth-brand"><div class="brand-mark"><span></span><span></span><span></span></div><div><strong>SemantIQ</strong><em>documentation ai</em></div></div>
+      <div class="auth-tabs">
+        <button class="${isSignIn ? "active" : ""}" data-action="auth-mode" data-mode="signin">Sign in</button>
+        <button class="${!isSignIn ? "active" : ""}" data-action="auth-mode" data-mode="signup">Create account</button>
+      </div>
+      <div class="auth-form">
+        <h1>${isSignIn ? "Welcome back" : "Create your account"}</h1>
+        <p>${isSignIn ? "Sign in to keep documenting your semantic models." : "Set up SemantIQ for your team's workspace."}</p>
+        <div class="auth-field"><label>Email</label><input id="auth-email" type="email" placeholder="you@company.com" value="${esc(state.authEmail)}" /></div>
+        <div class="auth-field"><label>Password</label><div class="auth-password-wrap"><input id="auth-password" type="${state.authShowPassword ? "text" : "password"}" placeholder="••••••••" value="${esc(state.authPassword)}" /><button type="button" class="auth-password-toggle" data-action="auth-toggle-password" title="${state.authShowPassword ? "Hide password" : "Show password"}">${icon(state.authShowPassword ? "eyeOff" : "eye", 15)}</button></div></div>
+        <div class="auth-meta-row">${isSignIn ? `<label><input type="checkbox" /> Remember me</label><button class="auth-forgot" data-action="toast" data-message="Password reset isn't wired up in this demo yet.">Forgot password?</button>` : `<label><input type="checkbox" /> I agree to the workspace terms</label>`}</div>
+        <button class="btn btn-primary full" data-action="auth-submit" ${state.busy ? "disabled" : ""}>${state.busy ? '<span class="spinner"></span>' : ""} ${isSignIn ? "Sign in" : "Create account"} ${icon("arrow", 15)}</button>
+      </div>
+      <div class="auth-divider"><span>or continue with</span></div>
+      <div class="auth-oauth-row">
+        <button class="auth-oauth-btn" data-action="auth-google" ${state.busy ? "disabled" : ""}>${googleMark()} Google</button>
+        <button class="auth-oauth-btn" data-action="auth-github" ${state.busy ? "disabled" : ""}>${githubMark()} GitHub</button>
+      </div>
+      <div class="auth-security">${icon("lock", 12)} Sessions are managed by Supabase Auth</div>
+    </div></div>
+    <div class="auth-marketing"><div class="auth-marketing-inner">
+      <span class="auth-eyebrow-pill">${icon("spark", 12)} AI Documentation Workspace</span>
+      <h2>Turn semantic models into shared understanding.</h2>
+      <p>SemantIQ reads your Power BI model, captures the business context around it, and drafts governed BRD, FRD, and semantic dictionary artifacts your whole data team can trust.</p>
+      <div class="auth-snapshot">
+        <div class="auth-snapshot-head"><b>Documentation coverage</b><span><i></i>Retail Analytics</span></div>
+        <div class="auth-snapshot-body">
+          <div class="auth-ring"><b>92%</b></div>
+          <div class="auth-snapshot-list">
+            <div><span class="check-square">${icon("check", 11)}</span> 12 semantic definitions documented</div>
+            <div><span class="check-square">${icon("check", 11)}</span> 4 measures explained in business language</div>
+            <div><span class="check-square violet-check">${icon("check", 11)}</span> Snowflake mapping cross-checked</div>
+          </div>
+        </div>
+      </div>
+      <div class="auth-features">
+        <div class="auth-feature"><span class="auth-feature-icon">${icon("database", 16)}</span><div><b>Parses Power BI semantic models</b><p>Tables, relationships, calculated columns, KPIs, and DAX measures — extracted automatically.</p></div></div>
+        <div class="auth-feature"><span class="auth-feature-icon">${icon("file", 16)}</span><div><b>Drafts BRD, FRD & business-friendly DAX</b><p>Structured documentation generated from metadata and the business context you provide.</p></div></div>
+        <div class="auth-feature"><span class="auth-feature-icon">${icon("plug", 16)}</span><div><b>Connects to enterprise data platforms</b><p>Cross-check and map your semantic layer against Snowflake, Databricks, and AWS.</p></div></div>
+      </div>
+    </div></div>
+  </div>`;
+}
+
+async function loadSharedProject(token) {
+  try {
+    const result = await getSharedProject(token);
+    if (!result) {
+      state.sharedError = "This share link is invalid or has been disabled.";
+      render();
+      return;
+    }
+    const { project, docs } = result;
+    state.projectName = project.name;
+    state.platform = project.platform || state.platform;
+    state.documents = docs;
+    state.sourceLabel = project.source_model || "the connected source model";
+    state.generatedDate = new Date(project.created_at).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+    state.resultTab = "brd";
+    render();
+  } catch (error) {
+    state.sharedError = error.message || "Could not load this shared project.";
+    render();
+  }
+}
+
+function sharedView() {
+  if (state.sharedError) {
+    return `<div class="auth-shell"><div class="auth-form-side"><div class="auth-form-inner">
+      <div class="auth-brand"><div class="brand-mark"><span></span><span></span><span></span></div><div><strong>SemantIQ</strong><em>documentation ai</em></div></div>
+      <h1>Link unavailable</h1><p>${esc(state.sharedError)}</p>
+      <a class="btn btn-primary full" href="${location.pathname}">Go to SemantIQ ${icon("arrow", 15)}</a>
+    </div></div></div>`;
+  }
+  const tabs = [["brd", "BRD preview", "Business requirements"], ["frd", "FRD preview", "Functional requirements"], ["dictionary", "Semantic dictionary", "Source definitions"], ["mapping", "Integration mapping", "Platform comparison"]];
+  return `<div class="shared-shell">
+    <header class="shared-topbar"><div class="doc-brand"><span class="brand-mark small"><span></span><span></span><span></span></span><b>SemantIQ</b></div><span class="status-pill"><i></i> Read-only shared view</span><a class="btn btn-ghost" href="${location.pathname}">${icon("arrow", 14)} Go to SemantIQ</a></header>
+    <div class="page">
+      <div class="results-shell"><section class="results-heading"><div><div class="eyebrow">DOCUMENTATION SET · SHARED</div><h1>${esc(state.projectName)}</h1><p>Power BI → ${state.platform} <span class="separator">·</span> Version 1.0</p></div></section>
+        <div class="result-grid"><section class="document-area"><div class="result-tabs">${tabs.map(([id, label, sub]) => `<button class="${state.resultTab === id ? "active" : ""}" data-action="result-tab" data-tab="${id}"><b>${label}</b><small>${sub}</small></button>`).join("")}</div><article class="document-preview">${documentContent()}</article></section></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function sidebar() {
+  const item = (id, label, glyph, meta = "") => `<button class="nav-item ${state.view === id ? "active" : ""}" data-action="nav" data-view="${id}">${icon(glyph, 17)}<span>${label}</span>${meta ? `<small>${meta}</small>` : ""}</button>`;
+  return `<aside class="sidebar">
+    <div class="brand"><div class="brand-mark"><span></span><span></span><span></span></div><div><strong>SemantIQ</strong><em>documentation ai</em></div></div>
+    <div class="workspace-switcher static"><div class="workspace-avatar">${esc(initials(state.user?.email))}</div><div><b>Personal workspace</b><small>${esc(state.user?.email || "")}</small></div></div>
+    <div class="nav-label">Workspace</div>
+    ${item("chat", "Agent Chat", "spark")}
+    ${item("dashboard", "Projects", "grid")}
+    ${item("wizard", "New documentation", "plus")}
+    <div class="nav-label nav-label-spaced">Explore</div>
+    ${item("dictionary", "Data dictionary", "database")}
+    ${item("integrations", "Integrations", "plug")}
+    <div class="sidebar-bottom">
+      ${item("settings", "Settings", "settings")}
+      <button class="nav-item" data-action="sign-out">${icon("logout", 17)}<span>Sign out</span></button>
+      <button class="profile-row" data-action="nav" data-view="settings"><span class="avatar">${esc(initials(state.user?.email))}</span><span><b>${esc(state.user?.email || "Signed in")}</b><small>Member</small></span><span class="online"></span></button>
+    </div>
+  </aside>`;
+}
+
+function topbar() {
+  const trail = state.view === "chat" ? "Agent Chat" : state.view === "dashboard" ? "Projects" : state.view === "wizard" ? "New documentation" : state.view === "settings" ? "Settings" : state.view === "dictionary" ? "Data dictionary" : state.view === "integrations" ? "Integrations" : esc(state.projectName);
+  return `<header class="topbar"><div class="breadcrumbs"><span>SemantIQ</span><b>/</b><strong>${trail}</strong></div>
+    <div class="top-actions"><span class="status-live"><i></i> All systems operational</span><button class="icon-btn" data-action="theme" title="Toggle light and dark mode">${icon(state.theme === "light" ? "moon" : "sun", 17)}</button><button class="help-btn" data-action="toast" data-message="Tip: start by connecting a Power BI model.">?</button></div>
+  </header>`;
+}
+
