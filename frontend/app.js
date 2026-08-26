@@ -671,3 +671,90 @@ async function executeAgentTool(name, args) {
 
 let pendingApprovalResolve = null;
 
+function requestApproval(calls) {
+  return new Promise((resolve) => {
+    state.pendingToolCalls = calls;
+    state.pendingDecisions = {};
+    pendingApprovalResolve = resolve;
+    render();
+  });
+}
+
+function resolveApproval(decisions) {
+  if (!pendingApprovalResolve) return;
+  const resolve = pendingApprovalResolve;
+  pendingApprovalResolve = null;
+  state.pendingToolCalls = null;
+  state.pendingDecisions = {};
+  resolve(decisions);
+}
+
+function maybeResolvePending() {
+  const calls = state.pendingToolCalls || [];
+  const decisions = state.pendingDecisions || {};
+  if (calls.length && calls.every((tc) => decisions[tc.id] !== undefined)) {
+    resolveApproval({ ...decisions });
+  } else {
+    render();
+  }
+}
+
+async function runAgentLoop() {
+  let guard = 0;
+  while (guard++ < 8) {
+    let result;
+    try {
+      const allowedTools = state.agentMode === "plan" ? READ_TOOL_NAMES : undefined;
+      result = await agentStep({ messages: state.agentHistory, modelContext: state.agentModelContext, provider: state.agentProvider, allowedTools });
+    } catch (error) {
+      state.agentMessages.push({ role: "assistant", content: error.message || "Something went wrong. Please try again." });
+      render();
+      return;
+    }
+
+    state.agentHistory.push({ role: "assistant", content: result.content || null, tool_calls: result.tool_calls || undefined });
+    if (result.content) state.agentMessages.push({ role: "assistant", content: result.content });
+    render();
+
+    if (!result.tool_calls || !result.tool_calls.length) return;
+
+    const autoCalls = result.tool_calls.filter((tc) => {
+      const category = AGENT_TOOL_META[tc.name]?.category || "write";
+      if (category === "read") return true;
+      if (category === "destructive") return false;
+      return state.agentMode === "auto";
+    });
+    const approvalCalls = result.tool_calls.filter((tc) => !autoCalls.includes(tc));
+
+    let decisions = {};
+    if (approvalCalls.length) {
+      decisions = await requestApproval(approvalCalls);
+    }
+
+    let signedOut = false;
+    for (const tc of result.tool_calls) {
+      const needsApproval = approvalCalls.includes(tc);
+      const approved = !needsApproval || decisions[tc.id];
+      const summary = summarizeToolCall(tc.name, tc.arguments);
+      if (!approved) {
+        state.agentHistory.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: JSON.stringify({ denied: true, reason: "The user declined this action." }) });
+        state.agentMessages.push({ role: "tool-note", denied: true, summary });
+        continue;
+      }
+      try {
+        const outcome = await executeAgentTool(tc.name, tc.arguments);
+        cacheAgentToolNames(tc.name, tc.arguments, outcome);
+        state.agentHistory.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: JSON.stringify(outcome).slice(0, 6000) });
+        state.agentMessages.push({ role: "tool-note", ok: true, summary });
+        if (tc.name === "sign_out") signedOut = true;
+      } catch (error) {
+        state.agentHistory.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: JSON.stringify({ error: error.message || String(error) }) });
+        state.agentMessages.push({ role: "tool-note", error: error.message || String(error), summary });
+      }
+    }
+    render();
+    if (signedOut) return;
+  }
+  state.agentMessages.push({ role: "assistant", content: "I've reached my step limit for this turn — let me know if you'd like me to continue." });
+}
+
