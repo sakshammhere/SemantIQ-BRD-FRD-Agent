@@ -357,3 +357,94 @@ function topbar() {
   </header>`;
 }
 
+function dashboard() {
+  return `<div class="content-narrow">
+    <section class="page-intro intro-row"><div><div class="eyebrow">DOCUMENTATION WORKSPACE</div><h1>Projects</h1><p>Turn semantic models into documentation your whole data team can trust.</p></div><button class="btn btn-primary" data-action="new-project">${icon("plus", 16)} New project</button></section>
+    <section class="metrics">
+      <div class="metric-card"><span class="metric-label">Documentation projects</span><strong id="metric-projects">—</strong><small id="metric-projects-sub" class="muted">Loading…</small></div>
+      <div class="metric-card"><span class="metric-label">Models documented</span><strong id="metric-models">—</strong><small class="muted">One model per project</small></div>
+      <div class="metric-card"><span class="metric-label">Last generation</span><strong id="metric-last">—</strong><small class="muted">Most recent artifact set</small></div>
+    </section>
+    <section class="section-head"><div><h2>Recent projects</h2><p>Documentation sets and model context in this workspace.</p></div><div class="list-tools"><div class="search-field">${icon("search", 15)}<input id="project-search" placeholder="Search projects" /></div><button class="filter-btn" data-action="toast" data-message="All projects are currently shown.">All statuses ${icon("chevron", 13)}</button></div></section>
+    <div id="projects-list-wrap"><div class="project-table-wrap"><table class="project-table"><thead><tr><th>Project</th><th>Source model</th><th>Status</th><th>Last updated</th><th></th></tr></thead><tbody id="projects-body"></tbody></table></div></div>
+    <section class="callout"><div class="callout-icon">${icon("spark", 19)}</div><div><b>Start with a model, finish with shared understanding.</b><p>Connect a Power BI model and SemantIQ will surface its structure, clarify the business meaning, and produce BRD, FRD, dictionary, and mapping artifacts.</p></div><button class="text-btn" data-action="new-project">Create a project ${icon("arrow", 15)}</button></section>
+  </div>`;
+}
+
+async function paintProjects() {
+  const wrap = document.querySelector("#projects-list-wrap");
+  if (!wrap) return;
+  let rows = [];
+  try {
+    rows = await listProjects();
+  } catch (error) {
+    toast(error.message || "Could not load projects.");
+  }
+
+  const metricProjects = document.querySelector("#metric-projects");
+  const metricProjectsSub = document.querySelector("#metric-projects-sub");
+  const metricModels = document.querySelector("#metric-models");
+  const metricLast = document.querySelector("#metric-last");
+  if (metricProjects) metricProjects.textContent = String(rows.length).padStart(2, "0");
+  if (metricProjectsSub) metricProjectsSub.textContent = rows.length ? "Across this workspace" : "None generated yet";
+  if (metricModels) metricModels.textContent = String(rows.length).padStart(2, "0");
+  if (metricLast) metricLast.textContent = rows.length ? formatDate(rows[0].updated_at) : "—";
+
+  if (!rows.length) {
+    wrap.innerHTML = `<div class="empty-state"><div class="callout-icon">${icon("file", 19)}</div><b>No projects yet</b><p>Generate your first documentation set from the wizard and it will show up here.</p><button class="btn btn-primary" data-action="new-project">${icon("plus", 15)} New project</button></div>`;
+    bindActionElements(wrap);
+    return;
+  }
+
+  wrap.innerHTML = `<div class="project-table-wrap"><table class="project-table"><thead><tr><th>Project</th><th>Source model</th><th>Status</th><th>Last updated</th><th></th></tr></thead><tbody id="projects-body"></tbody></table></div>`;
+  const body = document.querySelector("#projects-body");
+  body.innerHTML = rows.map((project, index) => `<tr data-project="${esc(project.name.toLowerCase())}" data-id="${esc(project.id)}">
+    <td><div class="project-name"><span class="project-glyph">${icon(index === 0 ? "database" : "file", 17)}</span><div><b>${esc(project.name)}</b><small>Semantic model documentation</small></div></div></td>
+    <td><span class="mono muted">${esc(project.source_model || "—")}</span></td>
+    <td><span class="status-pill ${project.status.toLowerCase()}"><i></i>${project.status}</span></td>
+    <td><span class="muted">${formatDate(project.updated_at)}</span></td>
+    <td><button class="row-more" data-action="open-project" title="Open project">${icon("chevron", 16)}</button></td>
+  </tr>`).join("");
+  bindActionElements(body);
+}
+
+async function loadProjectsCache() {
+  try {
+    state.projectsCache = await listProjects();
+  } catch (error) {
+    toast(error.message || "Could not load projects.");
+  }
+  state.projectsCacheLoaded = true;
+  render();
+}
+
+function dictionaryPage() {
+  const rows = state.projectsCache;
+  return `<div class="content-narrow">
+    <section class="page-intro"><div><div class="eyebrow">EXPLORE</div><h1>Data dictionary</h1><p>Every generated semantic dictionary across your projects, in one place.</p></div></section>
+    ${!state.projectsCacheLoaded
+      ? `<div class="field-note"><span class="mini-spinner"></span> Loading…</div>`
+      : !rows.length
+      ? `<div class="empty-state"><div class="callout-icon">${icon("database", 19)}</div><b>No dictionaries yet</b><p>Generate a project and its semantic dictionary will show up here.</p><button class="btn btn-primary" data-action="new-project">${icon("plus", 15)} New project</button></div>`
+      : `<div class="project-table-wrap"><table class="project-table"><thead><tr><th>Project</th><th>Platform</th><th>Tables</th><th>Last updated</th><th></th></tr></thead><tbody>${rows.map((p) => `<tr data-id="${esc(p.id)}"><td><div class="project-name"><span class="project-glyph">${icon("database", 17)}</span><div><b>${esc(p.name)}</b><small>${esc(p.source_model || "")}</small></div></div></td><td><span class="mono muted">${esc(p.platform || "—")}</span></td><td><span class="muted">${p.model_snapshot?.tables?.length ?? "—"}</span></td><td><span class="muted">${formatDate(p.updated_at)}</span></td><td><button class="row-more" data-action="open-project" data-id="${esc(p.id)}" data-tab="dictionary" title="View dictionary">${icon("chevron", 16)}</button></td></tr>`).join("")}</tbody></table></div>`
+    }
+  </div>`;
+}
+
+function integrationsPage() {
+  const rows = state.projectsCache;
+  return `<div class="content-narrow">
+    <section class="page-intro"><div><div class="eyebrow">EXPLORE</div><h1>Integrations</h1><p>Manage platform connections and jump to each project's integration mapping.</p></div></section>
+    ${connectionsCard()}
+    <section class="card settings-card">
+      <div class="card-title"><div><h3>Projects by platform</h3><p>Jump to a project's integration mapping report.</p></div></div>
+      ${!state.projectsCacheLoaded
+        ? `<div class="field-note"><span class="mini-spinner"></span> Loading…</div>`
+        : !rows.length
+        ? `<div class="empty-state"><div class="callout-icon">${icon("plug", 19)}</div><b>No projects yet</b><p>Generate a project to see its platform mapping here.</p></div>`
+        : `<div class="project-table-wrap"><table class="project-table"><thead><tr><th>Project</th><th>Platform</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((p) => `<tr data-id="${esc(p.id)}"><td><b>${esc(p.name)}</b></td><td><span class="mono muted">${esc(p.platform || "—")}</span></td><td><span class="status-pill ${p.status.toLowerCase()}"><i></i>${esc(p.status)}</span></td><td><button class="row-more" data-action="open-project" data-id="${esc(p.id)}" data-tab="mapping" title="View mapping">${icon("chevron", 16)}</button></td></tr>`).join("")}</tbody></table></div>`
+      }
+    </section>
+  </div>`;
+}
+
