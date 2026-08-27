@@ -1096,3 +1096,103 @@ function results() {
   </div>`;
 }
 
+function docTable(headers, rows) {
+  if (!rows.length) return "";
+  return `<div class="project-table-wrap"><table class="project-table"><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+
+function priorityBadge(p) {
+  const cls = p === "Must" ? "missing" : p === "Should" ? "renamed" : "";
+  return `<span class="mapping-status ${cls}"><i></i>${esc(p || "—")}</span>`;
+}
+
+function statusBadge(status) {
+  const cls = status === "Renamed" ? "renamed" : status === "Missing" ? "missing" : "";
+  return `<span class="mapping-status ${cls}"><i></i>${esc(status || "—")}</span>`;
+}
+
+function brdBody(doc) {
+  const objectives = doc.objectives || [];
+  const stakeholders = doc.stakeholders || [];
+  const requirements = doc.requirements || [];
+  const risks = doc.risks || [];
+  const glossary = doc.glossary || [];
+  const themes = [...new Set(requirements.map((r) => r.theme || "General"))];
+  return `
+    <section><h3>01 / Executive summary</h3><p>${esc(doc.executive_summary || "")}</p></section>
+    <section><h3>02 / Business background</h3><p>${esc(doc.business_background || "")}</p></section>
+    <section><h3>03 / Business objectives</h3>${docTable(["ID", "Objective", "Success metric"], objectives.map((o) => [esc(o.id), esc(o.statement), esc(o.success_metric)]))}</section>
+    <section><h3>04 / Stakeholders</h3>${docTable(["Role", "Responsibility", "Interest"], stakeholders.map((s) => [esc(s.role), esc(s.responsibility), esc(s.interest)]))}</section>
+    <section><h3>05 / Current state</h3><p>${esc(doc.current_state || "")}</p></section>
+    <section><h3>06 / Future state</h3><p>${esc(doc.future_state || "")}</p></section>
+    <section><h3>07 / In scope</h3><p>${(doc.in_scope || []).map(esc).join("<br />")}</p></section>
+    <section><h3>08 / Out of scope</h3><p>${(doc.out_of_scope || []).map(esc).join("<br />")}</p></section>
+    ${themes.map((theme) => `<section><h3>Requirements · ${esc(theme)}</h3>${docTable(["ID", "Requirement", "Priority", "Rationale"], requirements.filter((r) => (r.theme || "General") === theme).map((r) => [esc(r.id), esc(r.description), priorityBadge(r.priority), esc(r.rationale)]))}</section>`).join("")}
+    <section><h3>09 / Assumptions</h3><p>${(doc.assumptions || []).map(esc).join("<br />")}</p></section>
+    <section><h3>10 / Constraints</h3><p>${(doc.constraints || []).map(esc).join("<br />")}</p></section>
+    <section><h3>11 / Risks & mitigations</h3>${docTable(["Risk", "Impact", "Mitigation"], risks.map((r) => [esc(r.risk), esc(r.impact), esc(r.mitigation)]))}</section>
+    <section><h3>12 / Success criteria</h3><p>${(doc.success_criteria || []).map(esc).join("<br />")}</p></section>
+    <section><h3>13 / Glossary</h3>${docTable(["Term", "Definition"], glossary.map((g) => [esc(g.term), esc(g.definition)]))}</section>`;
+}
+
+function frdBody(doc) {
+  const modules = doc.modules || [];
+  const nfr = doc.non_functional_requirements || [];
+  const dataReqs = doc.data_requirements || [];
+  const traceability = doc.traceability || [];
+  return `
+    <section><h3>01 / Introduction</h3><p>${esc(doc.introduction || "")}</p></section>
+    <section><h3>02 / System overview</h3><p>${esc(doc.system_overview || "")}</p></section>
+    <section><h3>03 / Functional modules</h3>${modules.map((m, i) => `<div class="frd-module"><b>Module ${i + 1} · ${esc(m.name)}</b><p>${esc(m.description || "")}</p>${(m.stories || []).map((s) => `<div class="frd-story"><p><code>${esc(s.id)}</code> ${esc(s.story)} ${priorityBadge(s.priority)}</p><ul>${(s.acceptance_criteria || []).map((c) => `<li>${esc(c)}</li>`).join("")}</ul></div>`).join("")}</div>`).join("")}</section>
+    <section><h3>04 / Non-functional requirements</h3>${docTable(["Category", "Requirement"], nfr.map((n) => [esc(n.category), esc(n.requirement)]))}</section>
+    <section><h3>05 / Data requirements</h3>${docTable(["Entity", "Fields", "Notes"], dataReqs.map((d) => [esc(d.entity), esc((d.fields || []).join(", ")), esc(d.notes)]))}</section>
+    <section><h3>06 / Traceability matrix</h3>${docTable(["Business requirement", "Functional requirement"], traceability.map((t) => [esc(t.business_requirement), esc(t.functional_requirement)]))}</section>`;
+}
+
+function dictionaryBody(doc) {
+  const tables = doc.tables || [];
+  const relationships = doc.relationships || [];
+  const measures = doc.measures || [];
+  const glossary = doc.glossary || [];
+  const summary = doc.summary || {};
+  return `
+    <section><h3>Overview</h3><p>${summary.tables || 0} tables · ${summary.columns || 0} columns · ${summary.measures || 0} measures · ${summary.relationships || 0} relationships</p></section>
+    ${tables.map((t) => `<section><h3>${esc(t.name)}</h3><p>${esc(t.purpose || "")}</p>${docTable(["Column", "Type", "Key", "Description"], (t.columns || []).map((c) => [`<span class="mono">${esc(c.name)}</span>`, esc(c.type), c.key ? "◇" : "", esc(c.description)]))}</section>`).join("")}
+    <section><h3>Relationships</h3>${docTable(["From", "To", "Cardinality"], relationships.map((r) => [esc(r.from), esc(r.to), esc(r.cardinality)]))}</section>
+    <section><h3>Measures & KPIs</h3>${docTable(["Measure", "DAX expression", "Description"], measures.map((m) => [esc(m.name), `<code>${esc(m.expression)}</code>`, esc(m.description)]))}</section>
+    <section><h3>Glossary</h3>${docTable(["Term", "Definition"], glossary.map((g) => [esc(g.term), esc(g.definition)]))}</section>`;
+}
+
+function mappingDocBody(doc) {
+  const summary = doc.summary || {};
+  const tableMappings = doc.table_mappings || [];
+  const fieldMappings = doc.field_mappings || [];
+  const relMappings = doc.relationship_mappings || [];
+  const measureMappings = doc.measure_mappings || [];
+  return `
+    <section><h3>Summary</h3><p>${doc.mapped_pct || 0}% mapped (matched + renamed) across ${summary.total || 0} fields — ${summary.matched || 0} matched, ${summary.renamed || 0} renamed, ${summary.missing || 0} need review. Estimate pending a real catalog comparison.</p></section>
+    <section><h3>Table mapping</h3>${docTable(["Source table", "Target table", "Type"], tableMappings.map((t) => [esc(t.source_table), `<span class="mono">${esc(t.target_table)}</span>`, esc(t.type)]))}</section>
+    <section><h3>Field mapping</h3>${docTable(["Source", "Target", "Status", "Note"], fieldMappings.map((f) => [`<span class="mono">${esc(f.source_table)}.${esc(f.source_column)}</span>`, `<span class="mono">${esc(f.target_table)}.${esc(f.target_column)}</span>`, statusBadge(f.status), esc(f.note)]))}</section>
+    <section><h3>Relationship mapping</h3>${docTable(["Source", "Target join", "Cardinality"], relMappings.map((r) => [esc(r.source), `<span class="mono">${esc(r.target_join)}</span>`, esc(r.cardinality)]))}</section>
+    <section><h3>Measure mapping</h3>${docTable(["Measure", "Source DAX", "Note"], measureMappings.map((m) => [esc(m.measure), `<code>${esc(m.dax)}</code>`, esc(m.note)]))}</section>`;
+}
+
+function documentContent() {
+  const docs = state.documents || {};
+  const doc = docs[state.resultTab];
+  if (!doc) return `<div class="security-note">This document hasn't been generated yet.</div>`;
+  const body =
+    state.resultTab === "brd" ? brdBody(doc) :
+    state.resultTab === "frd" ? frdBody(doc) :
+    state.resultTab === "dictionary" ? dictionaryBody(doc) :
+    mappingDocBody(doc);
+  return `<div class="doc-cover"><div class="doc-brand"><span class="brand-mark small"><span></span><span></span><span></span></span><b>SemantIQ</b></div><span class="doc-type">${esc(doc.kicker)}</span><h2>${esc(doc.label)}</h2><h1>${esc(doc.title)}</h1><p>Prepared from <b>${esc(state.sourceLabel || "the connected source model")}</b> and business context captured on ${esc(state.generatedDate || new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }))}.</p></div><div class="doc-body">${body}<div class="doc-note"><span class="amber-note">${icon("spark", 14)}</span><div><b>Generated interpretation</b><p>This section was synthesized from model metadata and the documented business objective. Review before external distribution.</p></div></div></div>`;
+}
+
+function documentChat() {
+  if (!state.agentProvider) {
+    return `<aside class="document-chat"><div class="doc-chat-head"><div class="assistant-orb">${icon("spark", 16)}</div><div><h3>Ask about this document</h3><small>Context-aware assistant</small></div></div><div class="agent-connect small"><b>Connect an AI provider to ask questions</b><p>Add a key in Settings — the same one your Agent Chat uses.</p><button class="btn btn-primary" data-action="nav" data-view="settings">${icon("settings", 15)} Go to Settings</button></div></aside>`;
+  }
+  return `<aside class="document-chat"><div class="doc-chat-head"><div class="assistant-orb">${icon("spark", 16)}</div><div><h3>Ask about this document</h3><small>Context-aware assistant</small></div></div><div class="doc-chat-thread">${state.documentChat.length ? state.documentChat.map((message) => `<div class="chat-row ${message.role}"><div class="chat-avatar">${message.role === "assistant" ? icon("spark", 12) : esc(initials(state.user?.email))}</div><div><div class="bubble">${renderMarkdown(message.text)}</div><small>${message.time}</small></div></div>`).join("") : `<div class="chat-row assistant"><div class="chat-avatar">${icon("spark", 12)}</div><div><div class="bubble">Your documentation set is ready. Ask me about a definition, requirement, or mapping decision.</div></div></div>`}${state.documentChatBusy ? `<div class="chat-row assistant"><div class="chat-avatar">${icon("spark", 12)}</div><div><div class="bubble"><span class="mini-spinner"></span> Thinking…</div></div></div>` : ""}</div><div class="suggestion-list"><button data-action="suggestion" data-text="Summarize this document in three sentences.">Summarize this document</button><button data-action="suggestion" data-text="What's out of scope, and why?">What's out of scope?</button><button data-action="suggestion" data-text="Which item here needs the most manual review, and why?">What needs review?</button></div><div class="chat-compose"><input id="document-chat-input" placeholder="Ask or request a change…" ${state.documentChatBusy ? "disabled" : ""} /><button data-action="send-document-chat" ${state.documentChatBusy ? "disabled" : ""}>${icon("send", 16)}</button></div><div class="chat-foot">SemantIQ can suggest changes; you stay in control.</div></aside>`;
+}
+
