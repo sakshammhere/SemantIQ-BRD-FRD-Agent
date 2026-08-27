@@ -922,3 +922,75 @@ function agentChatPanel() {
   </div>`;
 }
 
+const isProviderConnected = (id) => state.apiKeys.some((k) => k.provider === id);
+
+function settingsView() {
+  const providers = Object.keys(PROVIDER_META);
+  const connected = (id) => state.apiKeys.find((k) => k.provider === id);
+  const active = connected(state.settingsTab);
+  const meta = PROVIDER_META[state.settingsTab];
+  const showForm = !active || state.editingKey;
+  const tested = state.testedProvider === state.settingsTab;
+  return `<div class="content-narrow">
+    <section class="page-intro"><div><div class="eyebrow">ACCOUNT</div><h1>Settings</h1><p>Your profile, AI provider keys, and appearance.</p></div></section>
+
+    <section class="card settings-card">
+      <div class="card-title"><div><h3>Profile</h3><p>Signed in with Supabase Auth.</p></div></div>
+      <div class="settings-profile-row"><span class="avatar large">${esc(initials(state.user?.email))}</span><div><b>${esc(state.user?.email || "")}</b><small>Member</small></div></div>
+      <div class="form-grid"><label>New password<input id="new-password" type="password" placeholder="At least 6 characters" value="${esc(state.newPassword)}" /></label><label>Confirm password<input id="confirm-password" type="password" placeholder="Repeat password" value="${esc(state.confirmPassword)}" /></label></div>
+      <div class="inline-actions"><span class="field-note">${icon("lock", 13)} Only used for email/password sign-in.</span><button class="btn btn-dark" data-action="change-password" ${state.passwordBusy ? "disabled" : ""}>${state.passwordBusy ? '<span class="spinner"></span>' : ""} Update password</button></div>
+    </section>
+
+    <section class="card settings-card">
+      <div class="card-title"><div><h3>AI provider</h3><p>Bring your own key — encrypted at rest, only ever decrypted server-side for your own requests.</p></div></div>
+      <div class="source-tabs">${providers.map((p) => `<button class="${state.settingsTab === p ? "selected" : ""}" data-action="settings-tab" data-tab="${p}">${connected(p) ? icon("check", 13) : ""} ${providerLabel(p)}</button>`).join("")}</div>
+      <div class="settings-provider-body">${!showForm
+        ? `<p class="field-note">${icon("check", 13)} Connected · model ${esc(active.model || meta.model)} · key ${esc(active.masked_key)}</p><div class="inline-actions"><span></span><div class="button-row"><button class="btn btn-ghost" data-action="edit-key">${icon("settings", 13)} Update key</button><button class="btn btn-ghost" data-action="remove-key" data-provider="${state.settingsTab}">${icon("close", 13)} Remove</button></div></div>`
+        : `<div class="form-grid">
+            <label>API key<input id="key-draft" type="password" placeholder="${meta.placeholder}" value="${esc(state.keyDraft)}" /></label>
+            ${tested && state.testedModels.length
+              ? `<label>Model<select id="model-draft">${state.testedModels.map((m) => `<option value="${esc(m.id)}" ${(state.modelDraft || "") === m.id ? "selected" : ""}>${esc(m.id)}${m.recommended ? " (Recommended)" : ""}</option>`).join("")}</select></label>`
+              : `<label>Model <span class="muted">(test connection to choose)</span><input placeholder="Test connection first" value="" disabled /></label>`}
+          </div>
+          <a class="provider-key-link" href="${meta.link}" target="_blank" rel="noopener noreferrer">${icon("link", 13)} Get a free ${providerLabel(state.settingsTab)} key at ${meta.linkLabel} ${icon("arrow", 12)}</a>
+          <div class="inline-actions">
+            <span class="field-note">${tested ? `${icon("check", 13)} Connection verified · ${state.testedModels.length} models available` : "Test your key before saving"}</span>
+            <div class="button-row">
+              ${active && state.editingKey ? `<button class="btn btn-ghost" data-action="cancel-edit-key">Cancel</button>` : ""}
+              <button class="btn btn-dark" data-action="test-key" ${state.keyBusy ? "disabled" : ""}>${state.keyBusy ? '<span class="spinner"></span>' : ""} Test connection</button>
+              <button class="btn btn-primary" data-action="save-key" ${(!tested || state.keyBusy) ? "disabled" : ""}>${state.keyBusy ? '<span class="spinner"></span>' : ""} Save key</button>
+            </div>
+          </div>`
+      }</div>
+    </section>
+
+    ${connectionsCard()}
+  </div>`;
+}
+
+function connectionsCard() {
+  const platforms = Object.keys(PLATFORM_META);
+  const connected = (id) => state.connections.find((c) => c.platform === id);
+  const active = connected(state.connectionsTab);
+  const meta = PLATFORM_META[state.connectionsTab];
+  const showForm = !active || state.editingConnection;
+  return `<section class="card settings-card">
+    <div class="card-title"><div><h3>Platform connections</h3><p>Read-only credentials for live schema cross-checks — no data rows are ever read or moved.</p></div></div>
+    <div class="source-tabs">${platforms.map((p) => `<button class="${state.connectionsTab === p ? "selected" : ""}" data-action="connection-tab" data-tab="${p}">${connected(p) ? icon("check", 13) : ""} ${platformLabel(p)}</button>`).join("")}</div>
+    <div class="settings-provider-body">${!state.connectionsLoaded
+      ? `<p class="field-note"><span class="mini-spinner"></span> Loading connections…</p>`
+      : !showForm
+      ? `<p class="field-note">${icon("check", 13)} Connected${active.label ? ` · ${esc(active.label)}` : ""}</p><div class="inline-actions"><span></span><div class="button-row"><button class="btn btn-ghost" data-action="edit-connection">${icon("settings", 13)} Update connection</button><button class="btn btn-ghost" data-action="remove-connection" data-platform="${state.connectionsTab}">${icon("close", 13)} Remove</button></div></div>`
+      : `<div class="form-grid">${meta.fields.map((f) => `<label>${f.label}<input data-connection-field="${f.key}" type="${f.type || "text"}" placeholder="${f.placeholder}" value="${esc(state.connectionDraft[f.key] || "")}" /></label>`).join("")}</div>
+          <div class="inline-actions">
+            <span class="field-note">${state.connectionTested ? `${icon("check", 13)} Connection verified` : "Test your connection before saving"}</span>
+            <div class="button-row">
+              ${active && state.editingConnection ? `<button class="btn btn-ghost" data-action="cancel-edit-connection">Cancel</button>` : ""}
+              <button class="btn btn-dark" data-action="test-connection-cred" ${state.connectionBusy ? "disabled" : ""}>${state.connectionBusy ? '<span class="spinner"></span>' : ""} Test connection</button>
+              <button class="btn btn-primary" data-action="save-connection" ${(!state.connectionTested || state.connectionBusy) ? "disabled" : ""}>${state.connectionBusy ? '<span class="spinner"></span>' : ""} Save connection</button>
+            </div>
+          </div>`
+    }</div>
+  </section>`;
+}
+
