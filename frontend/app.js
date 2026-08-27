@@ -1196,3 +1196,722 @@ function documentChat() {
   return `<aside class="document-chat"><div class="doc-chat-head"><div class="assistant-orb">${icon("spark", 16)}</div><div><h3>Ask about this document</h3><small>Context-aware assistant</small></div></div><div class="doc-chat-thread">${state.documentChat.length ? state.documentChat.map((message) => `<div class="chat-row ${message.role}"><div class="chat-avatar">${message.role === "assistant" ? icon("spark", 12) : esc(initials(state.user?.email))}</div><div><div class="bubble">${renderMarkdown(message.text)}</div><small>${message.time}</small></div></div>`).join("") : `<div class="chat-row assistant"><div class="chat-avatar">${icon("spark", 12)}</div><div><div class="bubble">Your documentation set is ready. Ask me about a definition, requirement, or mapping decision.</div></div></div>`}${state.documentChatBusy ? `<div class="chat-row assistant"><div class="chat-avatar">${icon("spark", 12)}</div><div><div class="bubble"><span class="mini-spinner"></span> Thinking…</div></div></div>` : ""}</div><div class="suggestion-list"><button data-action="suggestion" data-text="Summarize this document in three sentences.">Summarize this document</button><button data-action="suggestion" data-text="What's out of scope, and why?">What's out of scope?</button><button data-action="suggestion" data-text="Which item here needs the most manual review, and why?">What needs review?</button></div><div class="chat-compose"><input id="document-chat-input" placeholder="Ask or request a change…" ${state.documentChatBusy ? "disabled" : ""} /><button data-action="send-document-chat" ${state.documentChatBusy ? "disabled" : ""}>${icon("send", 16)}</button></div><div class="chat-foot">SemantIQ can suggest changes; you stay in control.</div></aside>`;
 }
 
+function toast(message) {
+  state.toast = message;
+  render();
+  setTimeout(() => { if (state.toast === message) { state.toast = null; render(); } }, 2600);
+}
+
+function applySession(session, user) {
+  const authedUser = user || session?.user || null;
+  state.user = authedUser ? { email: authedUser.email, id: authedUser.id } : null;
+  if (state.user && state.view === "login") state.view = "chat";
+  render();
+  if (state.view === "dashboard") paintProjects();
+  if (state.view === "chat" || state.view === "settings") loadApiKeys();
+  if (state.view === "settings" || state.view === "wizard") loadConnections();
+}
+
+async function loadApiKeys() {
+  try {
+    state.apiKeys = await listApiKeys();
+  } catch (error) {
+    toast(error.message || "Could not load API keys.");
+    state.apiKeys = [];
+  }
+  state.apiKeysLoaded = true;
+  if (!state.agentProvider && state.apiKeys.length) state.agentProvider = state.apiKeys[0].provider;
+  render();
+}
+
+async function loadConnections() {
+  try {
+    state.connections = await listConnections();
+  } catch (error) {
+    toast(error.message || "Could not load platform connections.");
+    state.connections = [];
+  }
+  state.connectionsLoaded = true;
+  render();
+}
+
+async function sendAgentMessage(text) {
+  const trimmed = (text || "").trim();
+  if (!trimmed || state.agentBusy || !state.agentProvider || state.pendingToolCalls) return;
+  state.agentMessages.push({ role: "user", content: trimmed });
+  state.agentHistory.push({ role: "user", content: trimmed });
+  state.agentInput = "";
+  state.agentBusy = true;
+  render();
+  await runAgentLoop();
+  state.agentBusy = false;
+  render();
+  await persistConversation();
+}
+
+function autoTitle() {
+  const firstUser = state.agentMessages.find((m) => m.role === "user");
+  if (firstUser && firstUser.content) {
+    const trimmedText = firstUser.content.trim();
+    return trimmedText.length > 60 ? `${trimmedText.slice(0, 60)}…` : trimmedText;
+  }
+  return `Chat — ${new Date().toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
+}
+
+async function persistConversation() {
+  if (state.agentMessages.filter((m) => m.role === "user").length === 0) return;
+  try {
+    if (!state.agentConversationId) {
+      const saved = await createConversation({
+        title: autoTitle(), messages: state.agentMessages, history: state.agentHistory,
+        modelContext: state.agentModelContext, modelLabel: state.agentModelLabel
+      });
+      state.agentConversationId = saved.id;
+    } else {
+      await updateConversation(state.agentConversationId, {
+        messages: state.agentMessages, history: state.agentHistory,
+        modelContext: state.agentModelContext, modelLabel: state.agentModelLabel
+      });
+    }
+    state.agentConversationsLoaded = false;
+  } catch (error) {
+    console.error("Autosave failed:", error);
+  }
+}
+
+async function loadAgentConversations() {
+  try {
+    state.agentConversations = await listConversations();
+  } catch (error) {
+    toast(error.message || "Could not load saved chats.");
+  }
+  state.agentConversationsLoaded = true;
+  render();
+}
+
+async function withBusy(task, busyKey = "busy") {
+  state[busyKey] = true;
+  render();
+  try { await task(); } catch (error) { toast(error.message || "Something went wrong. Please try again."); }
+  state[busyKey] = false;
+  render();
+}
+
+function readContext() {
+  state.projectName = document.querySelector("#project-name")?.value || state.projectName;
+  state.objective = document.querySelector("#objective")?.value || state.objective;
+  state.audience = document.querySelector("#audience")?.value || state.audience;
+  state.scopeIn = document.querySelector("#scope-in")?.value || state.scopeIn;
+  state.scopeOut = document.querySelector("#scope-out")?.value || state.scopeOut;
+}
+
+function bindActionElements(root) {
+  root.querySelectorAll("[data-action]").forEach((element) => element.addEventListener("click", handleAction));
+}
+
+function bindEvents() {
+  bindActionElements(document);
+  document.querySelector("#file-input")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      withBusy(async () => {
+        const result = await parseMetadata({ raw: String(reader.result || ""), provider: state.agentProvider });
+        state.parsedModel = result;
+        state.uploadedFileName = file.name;
+        state.uploadedFileBlob = file;
+        state.connected = true;
+        state.expandedTables = new Set(result.tables[0] ? [result.tables[0].name] : []);
+        toast(`${file.name} parsed successfully`);
+      });
+    };
+    reader.onerror = () => toast("Could not read that file.");
+    reader.readAsText(file);
+  });
+  document.querySelector("#metadata-input")?.addEventListener("input", (event) => { state.pasteDraft = event.target.value; });
+  document.querySelector("#project-search")?.addEventListener("input", (event) => {
+    const query = event.target.value.toLowerCase();
+    document.querySelectorAll("#projects-body tr").forEach((row) => { row.hidden = !row.dataset.project.includes(query); });
+  });
+  document.querySelector("#assistant-input")?.addEventListener("input", (event) => { state.assistantDraft = event.target.value; });
+  document.querySelector("#project-name")?.addEventListener("input", (event) => { state.projectName = event.target.value; });
+  document.querySelector("#objective")?.addEventListener("input", (event) => { state.objective = event.target.value; });
+  document.querySelector("#audience")?.addEventListener("input", (event) => { state.audience = event.target.value; });
+  document.querySelector("#scope-in")?.addEventListener("input", (event) => { state.scopeIn = event.target.value; });
+  document.querySelector("#scope-out")?.addEventListener("input", (event) => { state.scopeOut = event.target.value; });
+  document.querySelector("#auth-email")?.addEventListener("input", (event) => { state.authEmail = event.target.value; });
+  document.querySelector("#auth-password")?.addEventListener("input", (event) => { state.authPassword = event.target.value; });
+  document.querySelector("#document-chat-input")?.addEventListener("keydown", (event) => { if (event.key === "Enter") handleAction({ currentTarget: { dataset: { action: "send-document-chat" } } }); });
+  document.querySelector("#agent-input")?.addEventListener("input", (event) => { state.agentInput = event.target.value; });
+  document.querySelector("#agent-input")?.addEventListener("keydown", (event) => { if (event.key === "Enter") handleAction({ currentTarget: { dataset: { action: "agent-send" } } }); });
+  document.querySelector("#agent-provider-select")?.addEventListener("change", (event) => { state.agentProvider = event.target.value; });
+  document.querySelector("#agent-paste-input")?.addEventListener("input", (event) => { state.agentPasteDraft = event.target.value; });
+  document.querySelector("#agent-pull-search")?.addEventListener("input", (event) => { state.agentPullQuery = event.target.value; render(); });
+  document.querySelector("#agent-file-input")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      withBusy(async () => {
+        try {
+          const result = await parseMetadata({ raw: String(reader.result || ""), provider: state.agentProvider });
+          state.agentModelContext = result;
+          state.agentModelLabel = file.name;
+          state.agentAttachOpen = false;
+          toast(`${file.name} attached to this conversation.`);
+        } catch (error) {
+          toast(error.message || "Could not parse that file.");
+        }
+      });
+    };
+    reader.onerror = () => toast("Could not read that file.");
+    reader.readAsText(file);
+  });
+  document.querySelector("#key-draft")?.addEventListener("input", (event) => { state.keyDraft = event.target.value; });
+  document.querySelector("#model-draft")?.addEventListener("input", (event) => { state.modelDraft = event.target.value; });
+  document.querySelector("#model-draft")?.addEventListener("change", (event) => { state.modelDraft = event.target.value; });
+  document.querySelector("#new-password")?.addEventListener("input", (event) => { state.newPassword = event.target.value; });
+  document.querySelector("#confirm-password")?.addEventListener("input", (event) => { state.confirmPassword = event.target.value; });
+  document.querySelectorAll("[data-connection-field]").forEach((input) => {
+    input.addEventListener("input", (event) => { state.connectionDraft[event.target.dataset.connectionField] = event.target.value; });
+  });
+  const thread = document.querySelector("#agent-thread");
+  if (thread) thread.scrollTop = thread.scrollHeight;
+
+  if (document.querySelector(".mermaid")) {
+    mermaid.run({ querySelector: ".mermaid" }).catch(() => {});
+  }
+}
+
+async function handleAction(event) {
+  const target = event.currentTarget;
+  const action = target.dataset.action;
+  if (action === "auth-mode") {
+    state.authMode = target.dataset.mode; render();
+  } else if (action === "auth-toggle-password") {
+    state.authShowPassword = !state.authShowPassword; render();
+  } else if (action === "auth-submit") {
+    const email = state.authEmail.trim();
+    const password = state.authPassword;
+    if (!email || !password) { toast("Enter an email and password."); return; }
+    await withBusy(async () => {
+      if (state.authMode === "signin") {
+        const { session, user } = await signInWithEmail(email, password);
+        applySession(session, user);
+        toast("Signed in");
+      } else {
+        const { session, user } = await signUpWithEmail(email, password);
+        if (session) {
+          applySession(session, user);
+          toast("Account created — welcome to SemantIQ");
+        } else {
+          state.authMode = "signin"; state.authPassword = "";
+          toast("Check your email to confirm your account, then sign in.");
+        }
+      }
+    });
+  } else if (action === "auth-google" || action === "auth-github") {
+    await withBusy(async () => { await signInWithOAuth(action === "auth-google" ? "google" : "github"); });
+  } else if (action === "sign-out") {
+    await withBusy(async () => {
+      await signOut();
+      state.user = null; state.view = "login"; state.authEmail = ""; state.authPassword = "";
+      state.currentProjectId = null; state.documents = null; state.generated = false; state.pipeline = -1;
+      state.apiKeys = []; state.apiKeysLoaded = false; state.agentProvider = null;
+      state.connections = []; state.connectionsLoaded = false;
+      state.projectsCache = []; state.projectsCacheLoaded = false;
+      state.agentConversations = []; state.agentConversationsLoaded = false; state.agentConversationId = null;
+      state.agentModelContext = null; state.agentModelLabel = ""; state.agentAttachOpen = false; state.agentAttachTab = null;
+      state.agentHistory = []; state.pendingToolCalls = null; state.pendingDecisions = {}; state.agentProjectNames = {};
+      state.agentMessages = [{ role: "assistant", content: "Hi, I'm the SemantIQ agent. I can explain a model, generate a full documentation project, edit or regenerate an existing one, create a share link, or take you anywhere in the app — attach a model with the + button, or ask me to pull one of your saved projects. What would you like to do?" }];
+      toast("Signed out");
+    });
+  } else if (action === "agent-send") {
+    const input = document.querySelector("#agent-input");
+    await sendAgentMessage(input?.value);
+  } else if (action === "agent-suggest") {
+    await sendAgentMessage(target.dataset.text);
+  } else if (action === "agent-mode") {
+    state.agentMode = target.dataset.mode; render();
+  } else if (action === "toggle-agent-attach") {
+    state.agentAttachOpen = !state.agentAttachOpen;
+    if (state.agentAttachOpen && !state.agentAttachTab) state.agentAttachTab = "upload";
+    render();
+  } else if (action === "agent-attach-tab") {
+    state.agentAttachTab = target.dataset.tab;
+    if (state.agentAttachTab === "pull" && !state.agentPullProjects.length) {
+      state.agentPullLoading = true; render();
+      listProjects().then((rows) => {
+        state.agentPullProjects = rows.filter((p) => p.model_snapshot);
+        state.agentPullLoading = false; render();
+      }).catch((error) => { state.agentPullLoading = false; toast(error.message || "Could not load projects."); render(); });
+    }
+    render();
+  } else if (action === "agent-clear-attachment") {
+    state.agentModelContext = null; state.agentModelLabel = ""; render();
+  } else if (action === "agent-parse-paste") {
+    const raw = document.querySelector("#agent-paste-input")?.value.trim();
+    if (!raw) { toast("Paste something to parse first."); return; }
+    state.agentPasteDraft = raw;
+    await withBusy(async () => {
+      try {
+        const result = await parseMetadata({ raw, provider: state.agentProvider });
+        state.agentModelContext = result;
+        state.agentModelLabel = "pasted metadata";
+        state.agentAttachOpen = false;
+        toast("Model attached to this conversation.");
+      } catch (error) {
+        toast(error.message || "Could not parse that.");
+      }
+    });
+  } else if (action === "agent-pull-project") {
+    const id = target.closest("[data-id]")?.dataset.id;
+    if (!id) return;
+    await withBusy(async () => {
+      try {
+        const { project } = await getProjectWithDocuments(id);
+        if (!project.model_snapshot) { toast("This project has no saved model to pull."); return; }
+        state.agentModelContext = project.model_snapshot;
+        state.agentModelLabel = project.name;
+        state.agentProjectNames[project.id] = project.name;
+        state.agentAttachOpen = false;
+        toast(`Attached model from "${project.name}".`);
+      } catch (error) {
+        toast(error.message || "Could not load that project.");
+      }
+    });
+  } else if (action === "approve-tool-call") {
+    state.pendingDecisions[target.dataset.callId] = true;
+    maybeResolvePending();
+  } else if (action === "deny-tool-call") {
+    state.pendingDecisions[target.dataset.callId] = false;
+    maybeResolvePending();
+  } else if (action === "approve-all-tool-calls") {
+    const decisions = {};
+    (state.pendingToolCalls || []).forEach((tc) => { decisions[tc.id] = true; });
+    resolveApproval(decisions);
+  } else if (action === "deny-all-tool-calls") {
+    const decisions = {};
+    (state.pendingToolCalls || []).forEach((tc) => { decisions[tc.id] = false; });
+    resolveApproval(decisions);
+  } else if (action === "toggle-agent-memory") {
+    state.agentMemoryOpen = !state.agentMemoryOpen;
+    if (state.agentMemoryOpen && !state.agentConversationsLoaded) loadAgentConversations();
+    render();
+  } else if (action === "agent-new-chat") {
+    state.agentConversationId = null;
+    state.agentMessages = [{ role: "assistant", content: "Hi, I'm the SemantIQ agent. I can explain a model, generate a full documentation project, edit or regenerate an existing one, create a share link, or take you anywhere in the app — attach a model with the + button, or ask me to pull one of your saved projects. What would you like to do?" }];
+    state.agentHistory = [];
+    state.agentModelContext = null; state.agentModelLabel = "";
+    state.agentAttachOpen = false; state.agentAttachTab = null;
+    state.pendingToolCalls = null; state.pendingDecisions = {};
+    render();
+  } else if (action === "agent-save-chat") {
+    const currentTitle = state.agentConversations.find((c) => c.id === state.agentConversationId)?.title || autoTitle();
+    const name = window.prompt("Save this chat as:", currentTitle);
+    if (name === null) return;
+    await withBusy(async () => {
+      if (!state.agentConversationId) {
+        const saved = await createConversation({
+          title: name.trim() || autoTitle(), messages: state.agentMessages, history: state.agentHistory,
+          modelContext: state.agentModelContext, modelLabel: state.agentModelLabel
+        });
+        state.agentConversationId = saved.id;
+      } else {
+        await updateConversation(state.agentConversationId, { title: name.trim() || autoTitle() });
+      }
+      toast("Chat saved.");
+      state.agentConversationsLoaded = false;
+      if (state.agentMemoryOpen) await loadAgentConversations();
+    }, "agentSaveBusy");
+  } else if (action === "open-agent-conversation") {
+    const id = target.dataset.id;
+    await withBusy(async () => {
+      try {
+        const convo = await getConversation(id);
+        state.agentConversationId = convo.id;
+        state.agentMessages = convo.messages && convo.messages.length ? convo.messages : [{ role: "assistant", content: "Continuing this chat." }];
+        state.agentHistory = convo.history || [];
+        state.agentModelContext = convo.model_context || null;
+        state.agentModelLabel = convo.model_label || "";
+        state.agentAttachOpen = false; state.pendingToolCalls = null; state.pendingDecisions = {};
+        state.agentMemoryOpen = false;
+      } catch (error) {
+        toast(error.message || "Could not open that chat.");
+      }
+    });
+  } else if (action === "delete-agent-conversation") {
+    const id = target.dataset.id;
+    if (!window.confirm("Delete this saved chat? This can't be undone.")) return;
+    await withBusy(async () => {
+      try {
+        await deleteConversation(id);
+        if (state.agentConversationId === id) {
+          state.agentConversationId = null; state.agentHistory = [];
+          state.agentMessages = [{ role: "assistant", content: "Hi, I'm the SemantIQ agent. What would you like to do?" }];
+        }
+        await loadAgentConversations();
+      } catch (error) {
+        toast(error.message || "Could not delete that chat.");
+      }
+    });
+  } else if (action === "settings-tab") {
+    state.settingsTab = target.dataset.tab; state.keyDraft = ""; state.modelDraft = "";
+    state.testedModels = []; state.testedProvider = null; state.editingKey = false;
+    render();
+  } else if (action === "edit-key") {
+    state.editingKey = true; state.keyDraft = ""; state.modelDraft = "";
+    state.testedModels = []; state.testedProvider = null;
+    render();
+  } else if (action === "cancel-edit-key") {
+    state.editingKey = false; state.keyDraft = ""; state.modelDraft = "";
+    state.testedModels = []; state.testedProvider = null;
+    render();
+  } else if (action === "test-key") {
+    const apiKey = document.querySelector("#key-draft")?.value.trim();
+    if (!apiKey) { toast("Enter an API key first."); return; }
+    const provider = state.settingsTab;
+    await withBusy(async () => {
+      const result = await testApiKey({ provider, apiKey });
+      state.testedModels = result.models;
+      state.testedProvider = provider;
+      state.modelDraft = result.recommended || result.models[0]?.id || "";
+      toast(`Connected — ${result.models.length} model${result.models.length === 1 ? "" : "s"} available`);
+    }, "keyBusy");
+  } else if (action === "save-key") {
+    if (state.testedProvider !== state.settingsTab) { toast("Test the connection first."); return; }
+    const apiKey = document.querySelector("#key-draft")?.value.trim();
+    const model = document.querySelector("#model-draft")?.value.trim();
+    const overwriting = isProviderConnected(state.settingsTab);
+    if (overwriting && !window.confirm(`Replace your saved ${providerLabel(state.settingsTab)} key with this new one?`)) return;
+    await withBusy(async () => {
+      await saveApiKey({ provider: state.settingsTab, apiKey, model });
+      state.keyDraft = ""; state.modelDraft = ""; state.testedModels = []; state.testedProvider = null; state.editingKey = false;
+      toast(`${providerLabel(state.settingsTab)} key saved`);
+      await loadApiKeys();
+    }, "keyBusy");
+  } else if (action === "remove-key") {
+    const provider = target.dataset.provider;
+    if (!window.confirm(`Remove your saved ${providerLabel(provider)} key? You'll need to add it again to use this provider.`)) return;
+    await withBusy(async () => {
+      await deleteApiKey(provider);
+      if (state.agentProvider === provider) state.agentProvider = null;
+      toast(`${providerLabel(provider)} key removed`);
+      await loadApiKeys();
+    }, "keyBusy");
+  } else if (action === "connection-tab") {
+    state.connectionsTab = target.dataset.tab; state.connectionDraft = {};
+    state.connectionTested = false; state.editingConnection = false;
+    render();
+  } else if (action === "edit-connection") {
+    state.editingConnection = true; state.connectionDraft = {}; state.connectionTested = false;
+    render();
+  } else if (action === "cancel-edit-connection") {
+    state.editingConnection = false; state.connectionDraft = {}; state.connectionTested = false;
+    render();
+  } else if (action === "test-connection-cred") {
+    const platform = state.connectionsTab;
+    await withBusy(async () => {
+      try {
+        await testConnection({ platform, config: state.connectionDraft });
+        state.connectionTested = true;
+        toast(`${platformLabel(platform)} connection verified`);
+      } catch (error) {
+        state.connectionTested = false;
+        toast(error.message || "Connection test failed.");
+      }
+    }, "connectionBusy");
+  } else if (action === "save-connection") {
+    if (!state.connectionTested) { toast("Test the connection first."); return; }
+    const platform = state.connectionsTab;
+    const overwriting = isPlatformConnected(platform);
+    if (overwriting && !window.confirm(`Replace your saved ${platformLabel(platform)} connection with this new one?`)) return;
+    await withBusy(async () => {
+      await saveConnection({ platform, config: state.connectionDraft });
+      state.connectionDraft = {}; state.connectionTested = false; state.editingConnection = false;
+      toast(`${platformLabel(platform)} connection saved`);
+      await loadConnections();
+    }, "connectionBusy");
+  } else if (action === "remove-connection") {
+    const platform = target.dataset.platform;
+    if (!window.confirm(`Remove your saved ${platformLabel(platform)} connection?`)) return;
+    await withBusy(async () => {
+      await deleteConnection(platform);
+      toast(`${platformLabel(platform)} connection removed`);
+      await loadConnections();
+    }, "connectionBusy");
+  } else if (action === "change-password") {
+    const password = document.querySelector("#new-password")?.value || "";
+    const confirm = document.querySelector("#confirm-password")?.value || "";
+    if (password.length < 6) { toast("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { toast("Passwords don't match."); return; }
+    if (!window.confirm("Update your account password now?")) return;
+    await withBusy(async () => {
+      await updatePassword(password);
+      state.newPassword = ""; state.confirmPassword = "";
+      toast("Password updated");
+    }, "passwordBusy");
+  } else if (action === "theme") {
+    state.theme = state.theme === "light" ? "dark" : "light";
+    localStorage.setItem("sls-theme", state.theme);
+    render();
+  } else if (action === "nav") {
+    state.view = target.dataset.view;
+    if (state.view === "wizard") state.step = 1;
+    render();
+    if (state.view === "dashboard") paintProjects();
+    if (state.view === "chat" || state.view === "settings") loadApiKeys();
+    if (state.view === "settings" || state.view === "wizard" || state.view === "integrations") loadConnections();
+    if (state.view === "dictionary" || state.view === "integrations") loadProjectsCache();
+  } else if (action === "new-project") {
+    state.view = "wizard"; state.step = 1; state.generated = false; state.pipeline = -1;
+    state.currentProjectId = null; state.documents = null;
+    state.crossCheckResult = null;
+    if (!state.connectionsLoaded) loadConnections();
+    state.parsedModel = null; state.uploadedFileName = ""; state.pasteDraft = "";
+    state.uploadedFileBlob = null; state.sourceFilePath = null; state.showSourceModel = false;
+    state.suggestedKpis = []; state.connected = false; state.platformChecked = false;
+    render();
+  } else if (action === "open-project") {
+    const id = target.dataset.id || target.closest("tr")?.dataset.id;
+    const presetTab = target.dataset.tab;
+    if (!id) return;
+    await withBusy(async () => {
+      const { project, docs } = await getProjectWithDocuments(id);
+      state.currentProjectId = project.id;
+      state.projectName = project.name;
+      state.platform = project.platform || state.platform;
+      state.objective = project.objective || state.objective;
+      state.audience = project.audience || state.audience;
+      state.scopeIn = project.scope_in || state.scopeIn;
+      state.scopeOut = project.scope_out || state.scopeOut;
+      state.documents = docs;
+      state.suggestedKpis = [];
+      state.sourceLabel = project.source_model || "the connected source";
+      state.generatedDate = new Date(project.created_at).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+      state.parsedModel = project.model_snapshot || null;
+      state.sourceFilePath = project.source_file_path || null;
+      state.uploadedFileBlob = null;
+      state.showSourceModel = false;
+      state.generated = true; state.pipeline = 6;
+      state.resultTab = presetTab || "brd"; state.view = "results";
+    });
+  } else if (action === "reuse-model") {
+    if (!state.parsedModel) { toast("No source model available to reuse."); return; }
+    state.view = "wizard"; state.step = 1; state.generated = false; state.pipeline = -1;
+    state.currentProjectId = null; state.documents = null;
+    state.uploadedFileBlob = null; state.showSourceModel = false;
+    state.suggestedKpis = []; state.connected = true; state.platformChecked = false;
+    state.expandedTables = new Set(state.parsedModel.tables[0] ? [state.parsedModel.tables[0].name] : []);
+    toast("Model loaded — review it, then continue through the wizard.");
+    render();
+  } else if (action === "download-source-file") {
+    if (!state.sourceFilePath) { toast("No original file was saved for this project."); return; }
+    await withBusy(async () => {
+      const url = await getModelFileUrl(state.sourceFilePath);
+      window.open(url, "_blank");
+    });
+  } else if (action === "toggle-source-model") {
+    state.showSourceModel = !state.showSourceModel; render();
+  } else if (action === "source-tab") {
+    state.sourceTab = target.dataset.tab; render();
+  } else if (action === "test-connection") {
+    await withBusy(async () => {
+      const result = await testPbiConnection({ workspaceUrl: document.querySelector("#workspace-url")?.value });
+      state.connected = result.ok; toast(result.message);
+    });
+  } else if (action === "demo-upload") {
+    await withBusy(async () => {
+      const result = await parseMetadata({ raw: SAMPLE_BIM_JSON, provider: state.agentProvider });
+      state.parsedModel = result;
+      state.uploadedFileName = "retail-sample.bim";
+      state.uploadedFileBlob = null;
+      state.connected = true;
+      state.expandedTables = new Set(result.tables[0] ? [result.tables[0].name] : []);
+      toast("Sample model parsed successfully");
+    });
+  } else if (action === "validate-metadata") {
+    const raw = document.querySelector("#metadata-input")?.value.trim();
+    if (!raw) { toast("Paste something to parse first."); return; }
+    state.pasteDraft = raw;
+    await withBusy(async () => {
+      const result = await parseMetadata({ raw, provider: state.agentProvider });
+      state.parsedModel = result;
+      state.uploadedFileName = "pasted metadata";
+      state.uploadedFileBlob = null;
+      state.connected = true;
+      state.expandedTables = new Set(result.tables[0] ? [result.tables[0].name] : []);
+      toast("Metadata parsed successfully");
+    });
+  } else if (action === "toggle-table") {
+    const table = target.dataset.table;
+    state.expandedTables.has(table) ? state.expandedTables.delete(table) : state.expandedTables.add(table);
+    render();
+  } else if (action === "step") {
+    if (target.dataset.step) { state.step = Number(target.dataset.step); render(); }
+  } else if (action === "next") {
+    readContext();
+    await submitBusinessContext({ name: state.projectName, objective: state.objective });
+    state.step = Math.min(4, state.step + 1); render();
+  } else if (action === "prev") {
+    state.step = Math.max(1, state.step - 1); render();
+  } else if (action === "platform") {
+    state.platform = target.dataset.platform; state.platformChecked = false; state.crossCheckResult = null; render();
+  } else if (action === "test-platform") {
+    if (!state.parsedModel) { toast("Parse a semantic model first."); return; }
+    const slug = state.platform.toLowerCase();
+    await withBusy(async () => {
+      try {
+        const result = await crossCheckPlatform({ modelContext: state.parsedModel, platform: slug });
+        state.crossCheckResult = result;
+        state.platformChecked = true;
+        toast(`Live cross-check complete — ${result.mapped_pct}% mapped`);
+      } catch (error) {
+        state.platformChecked = false;
+        toast(error.message || "Cross-check failed.");
+      }
+    });
+  } else if (action === "send-context-chat") {
+    const input = document.querySelector("#assistant-input");
+    const text = input?.value.trim();
+    if (!text) return;
+    if (!state.agentProvider) { toast("Connect an AI provider in Settings to use the assistant."); return; }
+    state.chat.push({ role: "user", text, time: "just now" });
+    state.assistantDraft = "";
+    render();
+    await withBusy(async () => {
+      try {
+        const history = state.chat.map((m) => ({ role: m.role, content: m.text }));
+        const result = await chatWithAgent({ message: text, history, modelContext: state.parsedModel, provider: state.agentProvider });
+        state.chat.push({ role: "assistant", text: result.reply, time: "just now" });
+      } catch (error) {
+        state.chat.push({ role: "assistant", text: error.message || "I couldn't respond just now — try again.", time: "just now" });
+      }
+      render();
+    }, "contextChatBusy");
+  } else if (action === "generate") {
+    if (!state.agentProvider) { toast("Connect an AI provider in Settings before generating."); return; }
+    if (!state.parsedModel) { toast("Parse a semantic model first."); return; }
+    readContext();
+    state.busy = true; state.pipeline = 0; render();
+    await delay(400);
+    state.pipeline = 1; render();
+    try {
+      const businessContext = { projectName: state.projectName, objective: state.objective, audience: state.audience, scopeIn: state.scopeIn, scopeOut: state.scopeOut };
+      const sourceLabel = `Power BI · ${state.sourceTab === "live" ? "live workspace" : state.uploadedFileName || "pasted metadata"}`;
+      let sourceFilePath = state.sourceFilePath;
+      if (state.uploadedFileBlob) {
+        sourceFilePath = await uploadModelFile(state.uploadedFileBlob);
+      }
+      const generated = await generateDocuments({ modelContext: state.parsedModel, businessContext, platform: state.platform, provider: state.agentProvider });
+      state.pipeline = 4; render();
+      await delay(300);
+      const project = await createProjectWithDocuments({ name: state.projectName, sourceModel: sourceLabel, platform: state.platform, docs: generated.docs, modelSnapshot: state.parsedModel, sourceFilePath, objective: state.objective, audience: state.audience, scopeIn: state.scopeIn, scopeOut: state.scopeOut });
+      state.currentProjectId = project.id;
+      state.sourceLabel = sourceLabel;
+      state.sourceFilePath = sourceFilePath;
+      state.generatedDate = new Date().toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+      state.documents = generated.docs;
+      state.suggestedKpis = generated.suggested_kpis || [];
+      state.generated = true;
+      toast("Documentation set generated");
+    } catch (error) {
+      toast(error.message || "Generation failed.");
+    }
+    state.pipeline = 5; state.busy = false; render();
+  } else if (action === "view-results") {
+    state.view = "results"; render();
+  } else if (action === "result-tab") {
+    state.resultTab = target.dataset.tab; render();
+  } else if (action === "suggestion") {
+    const input = document.querySelector("#document-chat-input");
+    if (input) { input.value = target.dataset.text; input.focus(); }
+  } else if (action === "send-document-chat") {
+    const input = document.querySelector("#document-chat-input");
+    const text = input?.value.trim();
+    if (!text) return;
+    if (!state.agentProvider) { toast("Connect an AI provider in Settings to ask questions."); return; }
+    state.documentChat.push({ role: "user", text, time: "just now" }); render();
+    await withBusy(async () => {
+      try {
+        const history = state.documentChat.map((m) => ({ role: m.role, content: m.text }));
+        const modelContext = { model: state.parsedModel, active_document: state.documents?.[state.resultTab] };
+        const result = await chatWithAgent({ message: text, history, modelContext, provider: state.agentProvider });
+        state.documentChat.push({ role: "assistant", text: result.reply, time: "just now" });
+      } catch (error) {
+        state.documentChat.push({ role: "assistant", text: error.message || "I couldn't respond just now — try again.", time: "just now" });
+      }
+      render();
+    }, "documentChatBusy");
+  } else if (action === "share-project") {
+    if (!state.currentProjectId) { toast("Save this project before sharing."); return; }
+    await withBusy(async () => {
+      try {
+        const token = await enableShare(state.currentProjectId);
+        const url = `${location.origin}${location.pathname}?share=${token}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          toast("Public share link copied to clipboard.");
+        } catch {
+          toast(`Share link: ${url}`);
+        }
+      } catch (error) {
+        toast(error.message || "Could not create a share link.");
+      }
+    }, "shareBusy");
+  } else if (action === "download-current") {
+    await withBusy(() => downloadArtifact(state.resultTab), "downloadBusy");
+  } else if (action === "download-all") {
+    await withBusy(async () => {
+      for (const tab of ["brd", "frd", "dictionary", "mapping"]) {
+        await downloadArtifact(tab);
+      }
+    }, "downloadBusy");
+  } else if (action === "toast") {
+    toast(target.dataset.message || "This action is available in the full workspace.");
+  }
+}
+
+async function downloadArtifact(tab) {
+  if (!state.currentProjectId) { toast("Save this project before downloading."); return; }
+  try {
+    const { blob, filename } = await downloadDocumentFile(state.currentProjectId, tab);
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = filename;
+    document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 500);
+  } catch (error) {
+    toast(error.message || `Could not download ${tab}.`);
+  }
+}
+
+mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral" });
+
+const sharedToken = new URLSearchParams(location.search).get("share");
+if (sharedToken) state.view = "shared";
+
+render();
+
+(async () => {
+  if (sharedToken) {
+    await loadSharedProject(sharedToken);
+    return;
+  }
+  try {
+    const session = await getSession();
+    if (session) applySession(session, session.user);
+  } catch (error) {
+    toast(error.message || "Could not verify session.");
+  }
+})();
+
+onAuthStateChange((_event, session) => {
+  if (sharedToken) return;
+  if (session) {
+    applySession(session, session.user);
+  } else if (state.user) {
+    state.user = null; state.view = "login"; render();
+  }
+});
