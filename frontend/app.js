@@ -847,3 +847,78 @@ function chatView() {
   </div>`;
 }
 
+function agentConnectPrompt() {
+  return `<div class="agent-connect"><div class="callout-icon">${icon("spark", 22)}</div><b>Connect an AI provider to start chatting</b><p>SemantIQ uses your own API key (OpenAI, Groq, Gemini, or Claude) — never shared, encrypted at rest, and only decrypted server-side for your own requests.</p><button class="btn btn-primary" data-action="nav" data-view="settings">${icon("settings", 15)} Go to Settings</button></div>`;
+}
+
+function agentMessageRow(m) {
+  if (m.role === "tool-note") {
+    const cls = m.denied ? "denied" : m.error ? "error" : "ok";
+    return `<div class="tool-note ${cls}">${icon(m.denied || m.error ? "close" : "check", 12)} <span>${esc(m.summary)}</span>${m.error ? `<small>${esc(m.error)}</small>` : m.denied ? `<small>Declined</small>` : ""}</div>`;
+  }
+  if (m.role === "diagram") {
+    return `<div class="diagram-message"><div class="diagram-title">${icon("database", 12)} ${esc(m.title || "Diagram")}</div><pre class="mermaid">${esc(m.mermaid)}</pre></div>`;
+  }
+  return `<div class="chat-row ${m.role}"><div class="chat-avatar">${m.role === "assistant" ? icon("spark", 12) : esc(initials(state.user?.email))}</div><div><div class="bubble">${renderAgentText(m.content)}</div></div></div>`;
+}
+
+function approvalCardsHtml() {
+  const calls = state.pendingToolCalls || [];
+  const decisions = state.pendingDecisions || {};
+  return `<div class="approval-stack">${calls.map((tc) => {
+    const decided = decisions[tc.id];
+    const category = AGENT_TOOL_META[tc.name]?.category || "write";
+    return `<div class="approval-card ${category}">
+      <div class="approval-head"><span class="approval-badge ${category}">${category === "destructive" ? "Destructive" : "Action"}</span><b>${esc(summarizeToolCall(tc.name, tc.arguments))}</b></div>
+      ${decided === undefined
+        ? `<div class="approval-actions"><button class="btn btn-ghost" data-action="deny-tool-call" data-call-id="${tc.id}">Deny</button><button class="btn btn-primary" data-action="approve-tool-call" data-call-id="${tc.id}">Approve</button></div>`
+        : `<div class="approval-resolved">${decided ? `${icon("check", 12)} Approved` : `${icon("close", 12)} Denied`}</div>`}
+    </div>`;
+  }).join("")}${calls.length > 1 ? `<div class="approval-bulk"><button class="text-btn" data-action="deny-all-tool-calls">Deny all</button><button class="text-btn" data-action="approve-all-tool-calls">Approve all</button></div>` : ""}</div>`;
+}
+
+function agentPullPanel() {
+  const q = state.agentPullQuery.toLowerCase();
+  const rows = state.agentPullProjects.filter((p) => p.name.toLowerCase().includes(q));
+  return `<input id="agent-pull-search" placeholder="Search your projects…" value="${esc(state.agentPullQuery)}" />
+    <div class="agent-pull-list">${state.agentPullLoading
+      ? `<div class="field-note"><span class="mini-spinner"></span> Loading…</div>`
+      : rows.length
+      ? rows.map((p) => `<button class="agent-pull-row" data-action="agent-pull-project" data-id="${esc(p.id)}"><span>${icon("database", 14)}</span><div><b>${esc(p.name)}</b><small>${esc(p.platform || "")} · ${esc(p.status || "")}</small></div></button>`).join("")
+      : `<div class="field-note">No saved projects with a stored model found.</div>`}</div>`;
+}
+
+function agentAttachPanel() {
+  const tabs = [["upload", "Upload file", "upload"], ["paste", "Paste metadata", "file"], ["pull", "Pull a project", "database"]];
+  return `<div class="agent-attach-panel">
+    <div class="agent-attach-tabs">${tabs.map(([id, label, ic]) => `<button class="${state.agentAttachTab === id ? "selected" : ""}" data-action="agent-attach-tab" data-tab="${id}">${icon(ic, 14)} ${label}</button>`).join("")}</div>
+    <div class="agent-attach-body">${
+      state.agentAttachTab === "upload" ? `<label class="dropzone small" for="agent-file-input"><input type="file" id="agent-file-input" accept=".bim,.json,.tmdl,.txt" /><div class="drop-icon">${icon("upload", 18)}</div><b>Drop a model file here</b><span>or click to browse · BIM, JSON, TMDL</span>${state.agentBusy ? `<div class="upload-progress"><i></i></div>` : ""}</label>`
+      : state.agentAttachTab === "paste" ? `<textarea id="agent-paste-input" class="code-input" placeholder="Paste a .bim/JSON export, TMDL, or describe your model...">${esc(state.agentPasteDraft)}</textarea><div class="inline-actions"><span></span><button class="btn btn-dark" data-action="agent-parse-paste" ${state.agentBusy ? "disabled" : ""}>${state.agentBusy ? '<span class="spinner"></span>' : ""} Attach</button></div>`
+      : state.agentAttachTab === "pull" ? agentPullPanel()
+      : `<p class="field-note">Choose how to attach a semantic model to this conversation.</p>`
+    }</div>
+  </div>`;
+}
+
+function agentChatPanel() {
+  const attached = state.agentModelContext;
+  return `<div class="agent-body">
+    <div class="agent-thread" id="agent-thread">${state.agentMessages.map(agentMessageRow).join("")}${state.agentBusy && !state.pendingToolCalls ? `<div class="chat-row assistant"><div class="chat-avatar">${icon("spark", 12)}</div><div><div class="bubble"><span class="mini-spinner"></span> Working…</div></div></div>` : ""}${state.pendingToolCalls ? approvalCardsHtml() : ""}</div>
+    ${attached ? `<div class="agent-attachment-chip"><span>${icon("file", 13)} ${esc(state.agentModelLabel || "Model attached")}</span><button data-action="agent-clear-attachment" title="Remove">${icon("close", 12)}</button></div>` : ""}
+    ${state.agentAttachOpen ? agentAttachPanel() : ""}
+    <div class="agent-composer">
+      <div class="agent-chips">
+        <button data-action="agent-suggest" data-text="What can you help me with?">What can you do?</button>
+        <button data-action="agent-suggest" data-text="List my projects.">List my projects</button>
+        <button data-action="agent-suggest" data-text="Suggest additional KPIs based on the attached model.">Suggest KPIs</button>
+      </div>
+      <div class="chat-compose">
+        <button class="attach-btn ${state.agentAttachOpen ? "active" : ""}" data-action="toggle-agent-attach" title="Attach a model">${icon("plus", 16)}</button>
+        <input id="agent-input" placeholder="Ask SemantIQ anything, or tell it what to do…" value="${esc(state.agentInput)}" ${state.pendingToolCalls ? "disabled" : ""} />
+        <button data-action="agent-send" ${state.agentBusy || state.pendingToolCalls ? "disabled" : ""}>${icon("send", 16)}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
