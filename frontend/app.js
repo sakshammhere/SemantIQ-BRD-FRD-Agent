@@ -758,3 +758,92 @@ async function runAgentLoop() {
   state.agentMessages.push({ role: "assistant", content: "I've reached my step limit for this turn — let me know if you'd like me to continue." });
 }
 
+function inlineMd(escapedText) {
+  return escapedText
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+    .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<i>$1</i>")
+    .replace(/\n/g, "<br />");
+}
+
+function renderMdBlock(block) {
+  if (!block) return "";
+  if (/^CODE\d+$/.test(block)) return block;
+  const lines = block.split("\n");
+
+  if (lines.length >= 2 && /^\|.*\|$/.test(lines[0].trim()) && /^\|?[\s:|-]+\|?$/.test(lines[1].trim())) {
+    const headerCells = lines[0].trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+    const bodyRows = lines.slice(2).filter((l) => l.trim()).map((line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim()));
+    return `<div class="md-table-wrap"><table class="md-table"><thead><tr>${headerCells.map((c) => `<th>${inlineMd(esc(c))}</th>`).join("")}</tr></thead><tbody>${bodyRows.map((row) => `<tr>${row.map((c) => `<td>${inlineMd(esc(c))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  }
+
+  const headerMatch = lines.length === 1 && block.match(/^(#{1,4})\s+(.*)$/);
+  if (headerMatch) {
+    return `<div class="md-heading">${inlineMd(esc(headerMatch[2]))}</div>`;
+  }
+
+  if (lines.length && lines.every((l) => /^\s*[-*]\s+/.test(l))) {
+    return `<ul class="md-list">${lines.map((l) => `<li>${inlineMd(esc(l.trim().replace(/^[-*]\s+/, "")))}</li>`).join("")}</ul>`;
+  }
+
+  if (lines.length && lines.every((l) => /^\s*\d+\.\s+/.test(l))) {
+    return `<ol class="md-list">${lines.map((l) => `<li>${inlineMd(esc(l.trim().replace(/^\d+\.\s+/, "")))}</li>`).join("")}</ol>`;
+  }
+
+  return `<p class="md-p">${inlineMd(esc(block))}</p>`;
+}
+
+function renderMarkdown(raw) {
+  const text = String(raw || "");
+  const codeBlocks = [];
+  const withPlaceholders = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    codeBlocks.push({ lang: (lang || "").trim(), code });
+    return `CODE${codeBlocks.length - 1}`;
+  });
+
+  const blocks = withPlaceholders.split(/\n{2,}/);
+  const html = blocks.map((b) => renderMdBlock(b.trim())).filter(Boolean).join("");
+
+  return html.replace(/CODE(\d+)/g, (_, i) => {
+    const { lang, code } = codeBlocks[Number(i)];
+    if (lang === "mermaid") return `<pre class="mermaid">${esc(code.trim())}</pre>`;
+    return `<pre class="md-code"><code>${esc(code.trim())}</code></pre>`;
+  });
+}
+
+function renderAgentText(text) {
+  return renderMarkdown(text);
+}
+
+function agentMemoryPanel() {
+  return `<aside class="agent-memory-panel">
+    <div class="agent-memory-head"><b>Chat history</b><button data-action="toggle-agent-memory" title="Close">${icon("close", 14)}</button></div>
+    <button class="btn btn-dark" data-action="agent-new-chat">${icon("plus", 14)} New chat</button>
+    <div class="agent-memory-list">${!state.agentConversationsLoaded
+      ? `<div class="field-note"><span class="mini-spinner"></span> Loading…</div>`
+      : state.agentConversations.length
+      ? state.agentConversations.map((c) => `<div class="agent-memory-row ${c.id === state.agentConversationId ? "active" : ""}"><button data-action="open-agent-conversation" data-id="${esc(c.id)}"><b>${esc(c.title)}</b><small>${formatDate(c.updated_at)}</small></button><button class="row-delete" data-action="delete-agent-conversation" data-id="${esc(c.id)}" title="Delete">${icon("close", 11)}</button></div>`).join("")
+      : `<div class="field-note">No saved chats yet.</div>`}</div>
+  </aside>`;
+}
+
+function chatView() {
+  const hasKeys = state.apiKeys.length > 0;
+  const modes = [["auto", "Auto"], ["ask", "Ask each time"], ["plan", "Plan only"]];
+  return `<div class="agent-page">
+    ${state.agentMemoryOpen ? agentMemoryPanel() : ""}
+    <div class="agent-shell">
+      <div class="agent-header"><div><h1>SemantIQ Agent</h1><p>A real coworker for your semantic layer — explains, generates, edits, and manages your projects.</p></div>
+      ${hasKeys ? `<div class="agent-header-controls">
+          <button class="icon-btn" data-action="toggle-agent-memory" title="Chat history">${icon("history", 16)}</button>
+          <button class="btn btn-ghost" data-action="agent-new-chat" title="New chat">${icon("plus", 14)} New</button>
+          <button class="btn btn-ghost" data-action="agent-save-chat" ${state.agentSaveBusy ? "disabled" : ""} title="Save this chat">${state.agentSaveBusy ? '<span class="spinner"></span>' : icon("check", 14)} Save</button>
+          <div class="agent-mode-picker">${modes.map(([id, label]) => `<button class="${state.agentMode === id ? "active" : ""}" data-action="agent-mode" data-mode="${id}" title="Permission mode">${label}</button>`).join("")}</div>
+          <label class="agent-provider"><span>Model</span><select id="agent-provider-select">${state.apiKeys.map((k) => `<option value="${k.provider}" ${state.agentProvider === k.provider ? "selected" : ""}>${providerLabel(k.provider)}${k.model ? ` · ${esc(k.model)}` : ""}</option>`).join("")}</select></label>
+        </div>` : ""}
+      </div>
+      ${!state.apiKeysLoaded ? `<div class="agent-connect"><span class="spinner"></span></div>` : hasKeys ? agentChatPanel() : agentConnectPrompt()}
+    </div>
+  </div>`;
+}
+
