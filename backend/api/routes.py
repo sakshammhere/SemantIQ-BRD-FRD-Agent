@@ -128,3 +128,54 @@ def agent_step_route(body: AgentStepIn, user: CurrentUser = Depends(get_current_
 
 
 # ---------------------------------------------------------------- API keys
+class ApiKeyIn(BaseModel):
+    provider: str
+    api_key: str
+    model: Optional[str] = None
+
+
+class ApiKeyTestIn(BaseModel):
+    provider: str
+    api_key: str
+
+
+@router.post("/settings/api-keys/test")
+def test_api_key(body: ApiKeyTestIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    if body.provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown provider '{body.provider}'.")
+    try:
+        models = list_models(body.provider, body.api_key)
+    except LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    recommended = DEFAULT_MODELS.get(body.provider)
+    if recommended not in models and models:
+        recommended = models[0]
+    return {
+        "ok": True,
+        "models": [{"id": m, "recommended": m == recommended} for m in models],
+        "recommended": recommended,
+    }
+
+
+@router.get("/settings/api-keys")
+def list_api_keys(user: CurrentUser = Depends(get_current_user)) -> List[Dict[str, Any]]:
+    return api_keys_svc.list_api_keys(user.client())
+
+
+@router.post("/settings/api-keys")
+def save_api_key(body: ApiKeyIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    if body.provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown provider '{body.provider}'.")
+    if not body.api_key.strip():
+        raise HTTPException(status_code=400, detail="API key cannot be empty.")
+    return api_keys_svc.save_api_key(user.client(), user.id, body.provider, body.api_key.strip(), body.model)
+
+
+@router.delete("/settings/api-keys/{provider}")
+def delete_api_key(provider: str, user: CurrentUser = Depends(get_current_user)) -> Dict[str, str]:
+    api_keys_svc.delete_api_key(user.client(), provider)
+    return {"status": "deleted"}
+
+
+# ------------------------------------------------------------- model parsing
