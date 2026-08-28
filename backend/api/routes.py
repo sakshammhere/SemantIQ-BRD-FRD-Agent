@@ -285,3 +285,78 @@ def download_document_file(project_id: str, doc_type: str, user: CurrentUser = D
 
 
 # ------------------------------------------------------- platform connections
+class ConnectionIn(BaseModel):
+    platform: str
+    label: Optional[str] = None
+    config: Dict[str, Any]
+
+
+class ConnectionTestIn(BaseModel):
+    platform: str
+    config: Dict[str, Any]
+
+
+def _require_fields(platform: str, config: Dict[str, Any]) -> None:
+    connector = get_connector(platform)
+    missing = [f for f in connector.REQUIRED_FIELDS if not str(config.get(f, "")).strip()]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required field(s) for {platform}: {', '.join(missing)}.")
+
+
+@router.post("/settings/connections/test")
+def test_connection_route(body: ConnectionTestIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    if body.platform not in CONNECTORS:
+        raise HTTPException(status_code=400, detail=f"Unknown platform '{body.platform}'.")
+    _require_fields(body.platform, body.config)
+    connector = get_connector(body.platform)
+    try:
+        connector.test_connection(body.config)
+    except Exception as exc:  # noqa: BLE001 - surfaced directly, these SDKs raise many exception types
+        raise HTTPException(status_code=400, detail=f"Connection failed: {exc}") from exc
+    return {"ok": True}
+
+
+@router.get("/settings/connections")
+def list_connections_route(user: CurrentUser = Depends(get_current_user)) -> List[Dict[str, Any]]:
+    return platform_connections_svc.list_connections(user.client())
+
+
+@router.post("/settings/connections")
+def save_connection_route(body: ConnectionIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    if body.platform not in CONNECTORS:
+        raise HTTPException(status_code=400, detail=f"Unknown platform '{body.platform}'.")
+    _require_fields(body.platform, body.config)
+    return platform_connections_svc.save_connection(user.client(), user.id, body.platform, body.label, body.config)
+
+
+@router.delete("/settings/connections/{platform}")
+def delete_connection_route(platform: str, user: CurrentUser = Depends(get_current_user)) -> Dict[str, str]:
+    platform_connections_svc.delete_connection(user.client(), platform)
+    return {"status": "deleted"}
+
+
+# --------------------------------------------------------- live schema cross-check
+class CrossCheckIn(BaseModel):
+    model_context: Dict[str, Any]
+    platform: str
+
+
+@router.post("/platform/cross-check")
+def cross_check_route(body: CrossCheckIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    if body.platform not in CONNECTORS:
+        raise HTTPException(status_code=400, detail=f"Unknown platform '{body.platform}'.")
+
+    config = platform_connections_svc.get_decrypted_config(user.client(), body.platform)
+    if not config:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No {body.platform} connection saved. Add one in Settings first.",
+        )
+
+    connector = get_connector(body.platform)
+    try:
+        target_schema = connector.fetch_schema(config)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Could not read the {body.platform} catalog: {exc}") from exc
+
+    return schema_crosscheck.crosscheck(body.model_context, target_schema, body.platform)
