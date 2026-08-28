@@ -235,3 +235,53 @@ _FILENAMES = {
 }
 
 
+def _format_date(iso_str: Optional[str]) -> str:
+    if not iso_str:
+        return ""
+    try:
+        return datetime.fromisoformat(iso_str.replace("Z", "+00:00")).strftime("%B %d, %Y")
+    except ValueError:
+        return iso_str
+
+
+@router.get("/projects/{project_id}/documents/{doc_type}/file")
+def download_document_file(project_id: str, doc_type: str, user: CurrentUser = Depends(get_current_user)) -> Response:
+    if doc_type not in docgen.DOC_BUILDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown document type '{doc_type}'.")
+
+    client = user.client()
+    project_res = client.table("projects").select("*").eq("id", project_id).single().execute()
+    project = project_res.data
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    doc_res = (
+        client.table("documents")
+        .select("content")
+        .eq("project_id", project_id)
+        .eq("doc_type", doc_type)
+        .single()
+        .execute()
+    )
+    if not doc_res.data:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    doc_json = json.loads(doc_res.data["content"])
+    meta = {
+        "source_label": project.get("source_model") or "the connected source model",
+        "generated_date": _format_date(project.get("created_at")),
+        "platform": project.get("platform") or "",
+        "audience": project.get("audience") or "Stakeholders",
+    }
+
+    _ext, builder, mime = docgen.DOC_BUILDERS[doc_type]
+    file_bytes = builder(doc_json, meta)
+    filename = _FILENAMES[doc_type]
+    return Response(
+        content=file_bytes,
+        media_type=mime,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ------------------------------------------------------- platform connections
