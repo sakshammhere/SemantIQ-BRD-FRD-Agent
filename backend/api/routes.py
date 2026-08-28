@@ -179,3 +179,59 @@ def delete_api_key(provider: str, user: CurrentUser = Depends(get_current_user))
 
 
 # ------------------------------------------------------------- model parsing
+class ParseIn(BaseModel):
+    raw: str
+    provider: Optional[str] = None
+    model: Optional[str] = None
+
+
+@router.post("/parse-metadata")
+def parse_metadata_route(body: ParseIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    llm = None
+    if body.provider:
+        stored = api_keys_svc.get_decrypted_key(user.client(), body.provider)
+        if stored:
+            llm = LLM(provider=body.provider, api_key=stored["api_key"], model=body.model or stored.get("model") or None)
+
+    try:
+        return metadata_parser_agent.parse_metadata(body.raw, llm)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+# ------------------------------------------------------ documentation generation
+class GenerateIn(BaseModel):
+    model_context: Dict[str, Any]
+    business_context: Dict[str, Any]
+    platform: str
+    provider: str
+    model: Optional[str] = None
+
+
+@router.post("/generate")
+def generate_route(body: GenerateIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
+    if body.provider not in SUPPORTED_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"Unknown provider '{body.provider}'.")
+
+    stored = api_keys_svc.get_decrypted_key(user.client(), body.provider)
+    if not stored:
+        raise HTTPException(status_code=400, detail=f"No API key saved for {body.provider}. Add one in Settings first.")
+
+    llm = LLM(provider=body.provider, api_key=stored["api_key"], model=body.model or stored.get("model") or None)
+    try:
+        return pipeline.run_pipeline(body.model_context, body.business_context, body.platform, llm)
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------- real file downloads
+_FILENAMES = {
+    "brd": "BRD.docx",
+    "frd": "FRD.docx",
+    "dictionary": "Semantic_Layer_Dictionary.xlsx",
+    "mapping": "Integration_Mapping_Report.xlsx",
+}
+
+
