@@ -1,10 +1,5 @@
-"""Reads/writes a user's own platform connection credentials (Snowflake,
-Databricks, AWS). Same pattern as api_keys.py: ciphertext lives in Supabase
-(`platform_connections` table, RLS-scoped to the owner), encryption/decryption
-happens only here in the backend process. Each platform stores a small JSON
-config with multiple fields (not just one key), so the whole config is
-encrypted together as one blob.
-"""
+# reads/writes platform creds (snowflake/databricks/aws), same encrypted pattern
+# as api_keys.py but the whole config blob is encrypted together, not just one field
 from __future__ import annotations
 
 import json
@@ -16,8 +11,7 @@ from . import crypto
 
 TABLE = "platform_connections"
 
-# The one field per platform that's actually sensitive — everything else
-# (account, warehouse, database, region, ...) is safe to echo back plainly.
+# only field per platform that's actually sensitive, rest is fine to echo back plain
 SECRET_FIELD = {
     "snowflake": "password",
     "databricks": "access_token",

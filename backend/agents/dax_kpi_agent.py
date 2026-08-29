@@ -1,4 +1,4 @@
-"""Explains existing DAX measures in business language and suggests new KPIs."""
+# explains existing dax measures in plain english + suggests new kpis
 from __future__ import annotations
 
 import json

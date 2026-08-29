@@ -1,6 +1,4 @@
-"""Drafts a comprehensive Functional Requirements Document — organized as functional
-modules, each containing user stories with acceptance criteria — from the parsed
-model + business context."""
+# drafts the frd (functional modules -> user stories -> acceptance criteria)
 from __future__ import annotations
 
 import json

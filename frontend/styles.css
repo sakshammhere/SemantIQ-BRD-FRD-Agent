@@ -164,7 +164,7 @@ button { cursor: pointer; }
 .frd-story code { color: var(--teal); font: 10.5px var(--mono); background: var(--teal-soft); padding: 2px 6px; border-radius: 4px; }
 .frd-story ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 10.5px; line-height: 1.7; }
 
-/* Agentic Agent Chat */
+/* agent chat */
 .agent-header-controls { display: flex; align-items: end; gap: 12px; }
 .agent-mode-picker { display: flex; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); padding: 3px; gap: 2px; }
 .agent-mode-picker button { border: 0; background: transparent; color: var(--muted); padding: 6px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 600; cursor: pointer; }
@@ -198,7 +198,7 @@ button { cursor: pointer; }
 .agent-attach-body input#agent-pull-search { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 7px 9px; font-size: 11px; }
 .attach-btn { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); border-radius: 50%; cursor: pointer; }
 
-/* Markdown rendering inside chat bubbles */
+/* markdown inside chat bubbles */
 .bubble .md-p { margin: 0 0 8px; }
 .bubble .md-p:last-child { margin-bottom: 0; }
 .bubble .md-heading { font-weight: 700; font-size: 12px; margin: 10px 0 6px; }

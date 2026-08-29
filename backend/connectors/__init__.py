@@ -1,11 +1,5 @@
-"""Read-only connectors for real target-platform schema introspection.
-
-Each connector exposes the same two functions:
-  test_connection(config) -> None   (raises on failure)
-  fetch_schema(config)    -> List[{"table": str, "column": str, "type": str}]
-
-No data is ever read or moved — only catalog/information_schema metadata.
-"""
+# read-only target platform connectors, each just needs test_connection() + fetch_schema()
+# never reads actual data, only catalog/information_schema metadata
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List

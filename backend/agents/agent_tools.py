@@ -1,17 +1,6 @@
-"""Tool definitions for the main Agent Chat's agentic loop.
-
-Every tool the model can call is defined here — this is a deliberately
-bounded, safe set (see the "category" on each), not literal open-ended code
-execution, which no LLM provider's tool-calling API supports and wouldn't be
-safe to build. Categories drive the frontend's permission gating:
-  read        - always auto-runs, no confirmation
-  write       - gated by the user's chosen permission mode
-  destructive - always confirmed, even in Auto mode
-
-Execution itself happens entirely on the frontend (it already owns Supabase
-CRUD via RLS and the existing project/document/settings API) — this module
-only describes the tools to the LLM. The backend never executes a tool call.
-"""
+# tool defs for the agent chat's loop. category drives frontend permission gating
+# (read = auto-run, write = gated, destructive = always confirmed). backend never
+# executes a tool itself, frontend does that w/ its existing supabase access
 from __future__ import annotations
 
 TOOLS = [

@@ -1,5 +1,4 @@
-"""Drafts a comprehensive Business Requirements Document from the parsed model +
-business context."""
+# drafts the brd from the parsed model + biz context, shld stay decision-ready not technical
 from __future__ import annotations
 
 import json

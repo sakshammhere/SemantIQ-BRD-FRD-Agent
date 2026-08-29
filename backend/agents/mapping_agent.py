@@ -1,15 +1,6 @@
-"""Estimates how a Power BI semantic model maps onto a target platform's physical
-schema. This is a naming-convention estimate, not a live catalog comparison — real
-Snowflake/Databricks/AWS connections are a separate, later stage.
-
-Design: the LLM is asked for judgment calls only — per-table target names, the
-platform's general casing convention, and any fields that need a genuine business
-rename or flagging as unmappable. Python then deterministically expands that into
-one row per actual column in the model, applying the casing rule automatically. This
-guarantees full field coverage regardless of model size or LLM output length, instead
-of relying on the LLM to enumerate every field itself (which risks omissions on
-larger models).
-"""
+# estimates how the model maps onto a target platform's physical schema (naming
+# convention only, not a live catalog check -- that's schema_crosscheck.py's job).
+# llm makes the judgment calls, python expands them to every column so nothing's missed
 from __future__ import annotations
 
 import json
@@ -45,7 +36,7 @@ estimate pending a real catalog comparison, not a verified live schema match."""
 
 
 def _split_words(name: str) -> List[str]:
-    # Handle PascalCase/camelCase and existing snake/space separators alike.
+    # handles PascalCase/camelCase and existing snake/space separators alike
     spaced = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name)
     spaced = re.sub(r"(?<=[A-Za-z])(?=[0-9])", "_", spaced)
     parts = re.split(r"[\s_\-]+", spaced)

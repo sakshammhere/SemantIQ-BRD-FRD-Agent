@@ -1,7 +1,4 @@
-"""FastAPI application entry point.
-
-Run with:  uvicorn main:app --reload --port 8000
-"""
+# fastapi entrypoint, run w/ uvicorn main:app --reload --port 8000
 from __future__ import annotations
 
 import os

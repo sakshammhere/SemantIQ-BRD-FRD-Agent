@@ -1,8 +1,4 @@
-/**
- * API boundary. Connection-testing calls below are still mocked (no real
- * backend connects to Power BI/Snowflake/etc yet); project and document
- * persistence goes through Supabase.
- */
+// api boundary. project/doc persistence is real supabase, pbi live-connect below is still mocked
 import { supabase } from "./auth.js";
 
 const wait = (ms = 520) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -107,8 +103,7 @@ export async function createProjectWithDocuments({ name, sourceModel, platform, 
 }
 
 export async function updateProject(projectId, { name, objective, audience, scopeIn, scopeOut, platform }) {
-  // Loose null check on purpose: an agent tool call may send an explicit
-  // `null` (not just omit the key) for "leave this field unchanged".
+  // loose null check on purpose, an agent tool call may send explicit null for "unchanged"
   const patch = {};
   if (name != null) patch.name = name;
   if (objective != null) patch.objective = objective;

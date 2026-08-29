@@ -1,11 +1,5 @@
-"""Renders the structured JSON produced by the doc agents into real Office files.
-
-BRD/FRD are narrative requirement documents -> real .docx (python-docx).
-Data Dictionary/Integration Mapping are inherently tabular -> real .xlsx (openpyxl).
-
-Deterministic, template-driven — no LLM call happens here. This is purely a
-formatting layer over content the agents already produced.
-"""
+# renders the agents' json output into real office files -- brd/frd -> docx,
+# dictionary/mapping -> xlsx. purely a formatting layer, no llm call here
 from __future__ import annotations
 
 import io
@@ -21,7 +15,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-# ---- Brand palette (matches the frontend's design tokens) ----
+# brand colors, matches the frontend's design tokens
 INK = RGBColor(0x16, 0x22, 0x23)
 MUTED = RGBColor(0x70, 0x80, 0x80)
 TEAL = RGBColor(0x0E, 0x6B, 0x63)
@@ -39,8 +33,6 @@ RED_SOFT_HEX = "FCE8E8"
 LINE_HEX = "DCE5E4"
 INK_HEX = "162223"
 
-
-# =====================================================================  DOCX
 
 def _cell_shade(cell, hex_color: str) -> None:
     tcPr = cell._tc.get_or_add_tcPr()
@@ -300,8 +292,6 @@ def build_frd_docx(doc_json: Dict[str, Any], meta: Dict[str, Any]) -> bytes:
     doc.save(buf)
     return buf.getvalue()
 
-
-# =====================================================================  XLSX
 
 _HEADER_FILL = PatternFill(start_color=TEAL_HEX, end_color=TEAL_HEX, fill_type="solid")
 _HEADER_FONT = Font(color="FFFFFF", bold=True, size=10)

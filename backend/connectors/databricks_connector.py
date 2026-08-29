@@ -1,8 +1,4 @@
-"""Read-only Databricks (Unity Catalog / SQL warehouse) connector.
-
-Required config fields: server_hostname, http_path, access_token.
-Optional: catalog (default "main"), schema (default "default").
-"""
+# read-only databricks connector (unity catalog / sql warehouse), needs hostname/http_path/token
 from __future__ import annotations
 
 import re

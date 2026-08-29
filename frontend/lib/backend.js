@@ -1,11 +1,7 @@
-/**
- * Client for the SemantIQ FastAPI backend. Every call forwards the current
- * Supabase access token so the backend can verify identity and enforce the
- * same RLS policies already governing direct Supabase calls.
- */
+// fastapi backend client, forwards the supabase token so the backend enforces the same rls
 import { supabase } from "./auth.js";
 
-// Local dev default. Update this when the backend is deployed (Stage 5).
+// local dev default, update once the backend has a real deployed url
 export const BACKEND_URL = "http://localhost:8000/api";
 
 async function authHeaders() {

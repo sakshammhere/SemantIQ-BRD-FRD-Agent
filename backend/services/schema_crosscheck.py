@@ -1,7 +1,4 @@
-"""Deterministic comparison of a parsed semantic model against a REAL fetched
-target-platform schema (not an LLM guess). Used by the wizard's live
-"Test & cross-check schema" step once a platform connection is saved.
-"""
+# compares the parsed model against a real fetched target schema, no llm guessing here
 from __future__ import annotations
 
 import re

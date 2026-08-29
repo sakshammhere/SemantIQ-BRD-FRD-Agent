@@ -1,18 +1,5 @@
-"""The single LLM "brain" shared by every SemantIQ agent.
-
-Bring-your-own-key: the API key is always supplied by the authenticated user
-(decrypted server-side just before the call) and never falls back to a
-server-held secret. Four providers are supported:
-
-    openai     - native OpenAI Chat Completions
-    groq       - OpenAI-compatible endpoint, different base_url
-    gemini     - Google's OpenAI-compatible endpoint, different base_url
-    anthropic  - Claude's own SDK/message format
-
-A call "fails" if it raises OR returns unparseable JSON. Failures are
-classified as fatal (bad/expired key, no quota - raise immediately with an
-actionable message) or transient (let the caller decide whether to retry).
-"""
+# shared llm client every agent uses. byok only, never a server-held key.
+# openai/groq/gemini go thru the openai-compatible path, anthropic uses its own sdk
 from __future__ import annotations
 
 import json
@@ -21,7 +8,8 @@ from typing import Any, Dict, Optional, Tuple
 
 
 class LLMError(RuntimeError):
-    """Raised when the LLM is unconfigured or the call fails fatally."""
+    # raised when the llm isn't configured or a call fails fatally
+    pass
 
 
 PROVIDER_BASE_URLS: Dict[str, Optional[str]] = {
@@ -41,12 +29,7 @@ SUPPORTED_PROVIDERS = tuple(DEFAULT_MODELS.keys())
 
 
 def _diagnose(exc: Exception) -> Tuple[bool, str]:
-    """Classify a provider call failure.
-
-    Returns (fatal, message). "fatal" means retrying won't help (bad key,
-    quota exhausted) so we should stop with a clear message instead of
-    pretending the call could succeed on retry.
-    """
+    # classifies a failure as fatal (bad key/quota, retrying won't help) or transient
     name = type(exc).__name__
     text = str(exc).lower()
 
@@ -88,11 +71,7 @@ _EXCLUDE_SUBSTRINGS = (
 
 
 def list_models(provider: str, api_key: str) -> list[str]:
-    """Return the chat-capable model ids actually available to this key.
-
-    Raises LLMError if the key is invalid or the provider can't be reached —
-    this call doubles as the live "test connection" check.
-    """
+    # chat-capable model ids for this key, also doubles as the test-connection check
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
     if provider not in SUPPORTED_PROVIDERS:
@@ -128,7 +107,7 @@ def _list_models_openai_compatible(provider: str, api_key: str) -> list[str]:
         kwargs["base_url"] = base_url
     client = OpenAI(**kwargs)
     models = list(client.models.list())
-    # Newer models tend to have a later `created` timestamp — surface them first.
+    # newer models have a later created ts, so sort those first
     models.sort(key=lambda m: getattr(m, "created", 0) or 0, reverse=True)
     return [m.id for m in models]
 
@@ -165,8 +144,7 @@ def _list_models_gemini(api_key: str) -> list[str]:
 
 
 def _to_anthropic_messages(messages: list) -> list:
-    """Anthropic needs consecutive tool results batched into a single user
-    turn (multiple tool_result blocks), not one user turn per result."""
+    # anthropic wants consecutive tool results batched into one user turn, not one turn each
     out: list = []
     i = 0
     while i < len(messages):
@@ -204,7 +182,7 @@ class LLM:
         return bool(self.api_key and self.model and self.provider in SUPPORTED_PROVIDERS)
 
     def complete_json(self, system: str, user: str) -> Dict[str, Any]:
-        """Return a parsed JSON dict, or raise LLMError."""
+        # returns parsed json dict, or raises LLMError
         if not self.configured:
             raise LLMError(
                 f"No API key configured for '{self.provider or 'this provider'}'. "
@@ -229,15 +207,7 @@ class LLM:
         return result
 
     def complete_with_tools(self, system: str, messages: list, tools: list) -> Dict[str, Any]:
-        """Run one turn of a tool-calling agentic loop.
-
-        `messages` is a canonical list of turns:
-          {"role": "user"|"assistant", "content": str|None, "tool_calls": [{"id","name","arguments"}]|None}
-          {"role": "tool", "tool_call_id": str, "name": str, "content": str}
-        Returns one new assistant turn in that same shape: either a plain text
-        reply (tool_calls=None) or one or more requested tool calls
-        (content may still hold accompanying explanatory text).
-        """
+        # one turn of the tool-calling loop, returns either a text reply or requested tool calls
         if not self.configured:
             raise LLMError(
                 f"No API key configured for '{self.provider or 'this provider'}'. "

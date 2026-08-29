@@ -1,12 +1,5 @@
-"""Builds the semantic data dictionary.
-
-The structural facts (tables, columns, relationships, measure DAX) are assembled
-deterministically in Python directly from the parsed model — so the dictionary is
-always complete and accurate, never dependent on an LLM correctly reproducing a
-potentially large schema. The LLM is only asked for the business framing: each
-table's purpose/grain, and a short glossary of business terms — content that
-genuinely requires judgment rather than transcription.
-"""
+# builds the data dictionary. structural stuff (tables/cols/relationships/dax) is
+# assembled in python directly from the model -- llm only does the business framing
 from __future__ import annotations
 
 import json

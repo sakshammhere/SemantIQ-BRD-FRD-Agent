@@ -1,8 +1,4 @@
-"""Read-only Snowflake connector.
-
-Required config fields: account, user, password, warehouse, database, schema.
-Optional: role.
-"""
+# read-only snowflake connector, needs account/user/password/warehouse/database/schema (role optional)
 from __future__ import annotations
 
 from typing import Any, Dict, List

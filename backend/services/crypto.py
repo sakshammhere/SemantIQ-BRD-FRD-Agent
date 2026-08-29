@@ -1,15 +1,5 @@
-"""Symmetric encryption for at-rest secrets (LLM keys, platform credentials).
-
-Secrets are encrypted with a server-held key BEFORE being stored in Supabase,
-so a database dump / dashboard viewer never exposes them in plaintext.
-Decryption happens only in this backend process, for the authenticated
-owner's own request.
-
-Key resolution order:
-    1. ENCRYPTION_KEY env var (a urlsafe-base64 Fernet key) — use this in prod.
-    2. A key file (default .enc_key, gitignored) auto-generated on first use
-       so local dev works out of the box.
-"""
+# encrypts secrets at rest (llm keys, platform creds) before they hit supabase.
+# key comes from ENCRYPTION_KEY env var in prod, or an auto-generated .enc_key file locally
 from __future__ import annotations
 
 import os

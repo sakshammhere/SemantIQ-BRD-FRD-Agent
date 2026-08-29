@@ -1,5 +1,4 @@
-"""Orchestrates the full documentation-generation pipeline: interpret DAX/suggest
-KPIs, then draft BRD, FRD, dictionary, and platform mapping."""
+# runs the doc-gen pipeline: dax/kpi interpret, then brd/frd/dictionary/mapping
 from __future__ import annotations
 
 from typing import Any, Dict

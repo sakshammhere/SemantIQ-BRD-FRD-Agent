@@ -1,21 +1,5 @@
-"""Parses Power BI semantic model metadata into a normalized shape.
-
-Handles three input shapes, in order of preference:
-  1. Tabular Object Model / TMSL JSON (a real .bim export) — parsed
-     deterministically, no LLM call, exact fidelity.
-  2. JSON already matching our own normalized shape — passed through with
-     light defaulting.
-  3. Anything else (TMDL text, pasted DAX, loose freeform text) —
-     interpreted by the LLM into the same normalized shape.
-
-Normalized shape:
-{
-  "tables": [{"name": str, "description": str, "row_count": str|None,
-              "columns": [{"name": str, "type": str, "description": str, "key": bool}]}],
-  "relationships": [{"from": "Table.Column", "to": "Table.Column", "cardinality": str}],
-  "measures": [{"name": str, "expression": str, "description": str}]
-}
-"""
+# parses pbi model metadata (tmsl json / our own json / freeform text) into
+# {tables, relationships, measures} -- tmsl is exact, freeform goes thru the llm
 from __future__ import annotations
 
 import json
@@ -62,10 +46,7 @@ def _looks_like_normalized(data: Any) -> bool:
 
 
 def _as_text(value: Any) -> str:
-    """TMSL sometimes serializes a multi-line DAX expression as a JSON array
-    of lines (Tabular Editor does this for auto-formatted expressions like
-    DIVIDE(...)) instead of a single string. Normalize either shape to text.
-    """
+    # tmsl sometimes splits a dax expr into a list of lines instead of one string
     if isinstance(value, list):
         return "\n".join(str(v) for v in value)
     return value or ""
@@ -81,7 +62,7 @@ def _parse_tmsl(data: Dict[str, Any]) -> Dict[str, Any]:
         from_col = rel.get("fromColumn", "")
         to_table = rel.get("toTable", "")
         to_col = rel.get("toColumn", "")
-        # The "to" side of a Power BI relationship is conventionally the one-side / key.
+        # "to" side of a pbi relationship is usually the one-side / key
         key_columns.add((to_table, to_col))
         from_card = (rel.get("fromCardinality") or "many").lower()
         to_card = (rel.get("toCardinality") or "one").lower()

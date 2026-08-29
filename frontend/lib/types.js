@@ -1,7 +1,5 @@
 /**
- * Shared data contracts for the mock API. Replace these JSDoc contracts with
- * TypeScript interfaces when the real Node API is connected.
- *
+ * shared data contracts, kept as jsdoc since there's no bundler/ts setup here
  * @typedef {{name: string, type: string, description: string, key?: boolean}} Column
  * @typedef {{name: string, rowCount: string, description: string, columns: Column[]}} Table
  * @typedef {{name: string, expression: string, format: string, description: string}} Measure

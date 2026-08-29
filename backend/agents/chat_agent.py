@@ -1,10 +1,5 @@
-"""The conversational agent — SemantIQ's chatbot interface.
-
-Per the product's mission: interpret Power BI semantic model metadata
-(tables, joins, KPIs, measures, DAX), explain it in business-friendly
-language, help draft BRD/FRD content, suggest relevant KPIs, and advise on
-mapping to enterprise data platforms (Snowflake, Databricks, AWS, others).
-"""
+# the chatbot interface -- explains the model in plain english, helps draft
+# brd/frd, suggests kpis, advises on platform mapping
 from __future__ import annotations
 
 import json

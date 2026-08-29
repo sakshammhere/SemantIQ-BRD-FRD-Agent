@@ -1,8 +1,4 @@
-"""Read-only AWS Glue Data Catalog connector (the metadata layer Redshift
-Spectrum / Athena / Glue jobs share — reading it needs no warehouse compute).
-
-Required config fields: aws_access_key_id, aws_secret_access_key, region, glue_database.
-"""
+# read-only aws glue catalog connector, no warehouse compute needed to read it
 from __future__ import annotations
 
 from typing import Any, Dict, List

@@ -1,4 +1,4 @@
-"""HTTP API for the SemantIQ backend."""
+# the actual http api, all routes live here
 from __future__ import annotations
 
 import json
@@ -30,7 +30,6 @@ def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-# --------------------------------------------------------------------- chat
 class ChatTurn(BaseModel):
     role: str
     content: str
@@ -70,7 +69,6 @@ def chat(body: ChatIn, user: CurrentUser = Depends(get_current_user)) -> Dict[st
     return result
 
 
-# --------------------------------------------------------- agentic tool loop
 class AgentToolCall(BaseModel):
     id: str
     name: str
@@ -95,13 +93,8 @@ class AgentStepIn(BaseModel):
 
 @router.post("/agent/step")
 def agent_step_route(body: AgentStepIn, user: CurrentUser = Depends(get_current_user)) -> Dict[str, Any]:
-    """One turn of the Agent Chat's tool-calling loop. Stateless: the caller
-    (frontend) always sends the full conversation, including any prior tool
-    calls/results. The backend never executes a tool itself — it only decides,
-    via the LLM, whether to reply with text or request one or more tool calls;
-    the frontend executes those (with permission gating) and sends the results
-    back in the next call.
-    """
+    # one turn of the tool loop, stateless -- frontend always sends the full convo
+    # incl any prior tool calls/results, and executes whatever tools we request
     if body.provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=400, detail=f"Unknown provider '{body.provider}'.")
 
@@ -127,7 +120,6 @@ def agent_step_route(body: AgentStepIn, user: CurrentUser = Depends(get_current_
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-# ---------------------------------------------------------------- API keys
 class ApiKeyIn(BaseModel):
     provider: str
     api_key: str
@@ -178,7 +170,6 @@ def delete_api_key(provider: str, user: CurrentUser = Depends(get_current_user))
     return {"status": "deleted"}
 
 
-# ------------------------------------------------------------- model parsing
 class ParseIn(BaseModel):
     raw: str
     provider: Optional[str] = None
@@ -201,7 +192,6 @@ def parse_metadata_route(body: ParseIn, user: CurrentUser = Depends(get_current_
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-# ------------------------------------------------------ documentation generation
 class GenerateIn(BaseModel):
     model_context: Dict[str, Any]
     business_context: Dict[str, Any]
@@ -226,7 +216,6 @@ def generate_route(body: GenerateIn, user: CurrentUser = Depends(get_current_use
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-# --------------------------------------------------------- real file downloads
 _FILENAMES = {
     "brd": "BRD.docx",
     "frd": "FRD.docx",
@@ -284,7 +273,6 @@ def download_document_file(project_id: str, doc_type: str, user: CurrentUser = D
     )
 
 
-# ------------------------------------------------------- platform connections
 class ConnectionIn(BaseModel):
     platform: str
     label: Optional[str] = None
@@ -335,7 +323,6 @@ def delete_connection_route(platform: str, user: CurrentUser = Depends(get_curre
     return {"status": "deleted"}
 
 
-# --------------------------------------------------------- live schema cross-check
 class CrossCheckIn(BaseModel):
     model_context: Dict[str, Any]
     platform: str

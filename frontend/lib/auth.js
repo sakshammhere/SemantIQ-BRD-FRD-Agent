@@ -1,7 +1,4 @@
-/**
- * Supabase auth boundary. Loaded via CDN ESM import since the app has no
- * bundler — this keeps auth isolated from UI code, same spirit as api.js.
- */
+// supabase auth boundary, loaded via cdn esm since there's no bundler here
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = "https://zhrtrcafpkxnsgjponmg.supabase.co";

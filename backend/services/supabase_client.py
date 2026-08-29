@@ -1,12 +1,5 @@
-"""Supabase access for the backend.
-
-The backend never holds a service_role key. Every request instead forwards
-the user's own Supabase access token (the same one the frontend already has
-from supabase-js), so every table read/write goes through the *same* Row
-Level Security policies already enforced for the browser. This keeps a
-single source of truth for "who can see what" instead of duplicating it in
-backend logic.
-"""
+# backend never holds a service_role key -- forwards the user's own supabase token
+# on every request so it goes thru the same RLS policies the browser already has
 from __future__ import annotations
 
 import os
@@ -36,7 +29,7 @@ class CurrentUser:
         self.token = token
 
     def client(self) -> Client:
-        """A Supabase client authenticated as this user (RLS applies)."""
+        # supabase client authed as this user, so rls applies
         client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
         client.postgrest.auth(self.token)
         return client

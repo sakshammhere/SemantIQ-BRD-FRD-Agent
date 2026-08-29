@@ -1,8 +1,4 @@
-"""Reads/writes a user's own bring-your-own LLM API keys.
-
-Ciphertext lives in Supabase (`api_keys` table, RLS-scoped to the owner);
-encryption/decryption happens only here, in the backend process.
-"""
+# reads/writes a user's byok llm keys, encrypted in the api_keys table (rls-scoped)
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
