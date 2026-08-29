@@ -14,7 +14,7 @@ BRD, FRD, and semantic-layer documentation for analytics solutions is usually wr
 |---|---|
 | Chatbot interface | Conversational intake for business context, plus a persistent chat sidebar for iterating on generated docs |
 | Automates BRD/FRD creation | Dedicated LLM agents draft the BRD and FRD from the model + business context |
-| Extracts Power BI semantic layer details | Reads tables, relationships, calculated tables, KPIs, measures, and DAX straight from the model |
+| Extracts Power BI semantic layer details | Reads tables, relationships, calculated tables, KPIs, measures, and DAX straight from a model export (.bim/JSON/TMDL — upload or paste) |
 | Documents in business-friendly language | Every table, join, KPI, measure, and DAX expression is explained in plain business language, not technical DAX syntax |
 | Suggests additional KPIs | A dedicated agent reviews the existing measures and proposes relevant KPIs the model doesn't yet have |
 | Platform integration | Live schema cross-check and mapping report against Snowflake, Databricks, or AWS |
@@ -59,4 +59,12 @@ Open `http://localhost:4173`. Sign up, then add an LLM provider key in Settings 
 
 ## Status
 
-Actively built for a hackathon submission. Core pipeline (parsing, BRD/FRD/dictionary/mapping generation, platform cross-check, real document export) is functional end to end. See in-repo progress notes for what's still being refined.
+Built for a hackathon submission. Core documentation pipeline is functional end to end today.
+
+| Capability | Status |
+|---|---|
+| Model ingestion via upload / paste (.bim, JSON, TMDL) | ✅ Working |
+| BRD, FRD, semantic dictionary, KPI suggestions | ✅ Working — real LLM agent pipeline |
+| Snowflake / Databricks / AWS schema cross-check & mapping | ✅ Working — real connectors, live catalogs |
+| Real `.docx` / `.xlsx` document export | ✅ Working |
+| Power BI live workspace connection | 🚧 Roadmap — upload/paste cover the same extraction today |
