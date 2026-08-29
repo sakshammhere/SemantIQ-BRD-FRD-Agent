@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1120" width="100%">
+  <style>
+    text { font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
+  </style>
+  <defs>
+    <marker id="arrowDark" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#333333"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#C9962C"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#3568D4"/>
+    </marker>
+    <marker id="arrowGrey" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#74748A"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1400" height="1120" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="700" y="42" text-anchor="middle" font-size="27" font-weight="700" fill="#2F5FCB">SemantIQ &#8212; Architecture</text>
+  <text x="700" y="68" text-anchor="middle" font-size="13.5" fill="#6b6b78">Blue = LLM reasoning (core/llm.py)&#160;&#160;&#183;&#160;&#160;Green = deterministic Python&#160;&#160;&#183;&#160;&#160;Orange = input / output</text>
+
+  <!-- ============ INPUT ROW ============ -->
+  <g>
+    <rect x="15" y="100" width="436" height="65" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="233" y="128" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Power BI Model</text>
+    <text x="233" y="148" text-anchor="middle" font-size="12" fill="#7A5A15">upload / paste</text>
+
+    <rect x="482" y="100" width="436" height="65" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="700" y="128" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Business Context</text>
+    <text x="700" y="148" text-anchor="middle" font-size="12" fill="#7A5A15">(chat)</text>
+
+    <rect x="949" y="100" width="436" height="65" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="1167" y="128" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Target Platform</text>
+    <text x="1167" y="148" text-anchor="middle" font-size="12" fill="#7A5A15">Snowflake / Databricks / AWS</text>
+  </g>
+
+  <!-- input convergence arrows -->
+  <polyline points="233,165 233,195 700,195 700,225" fill="none" stroke="#C9962C" stroke-width="2.5" marker-end="url(#arrowAmber)"/>
+  <polyline points="700,165 700,225" fill="none" stroke="#C9962C" stroke-width="2.5" marker-end="url(#arrowAmber)"/>
+  <polyline points="1167,165 1167,195 700,195 700,225" fill="none" stroke="#C9962C" stroke-width="2.5" marker-end="url(#arrowAmber)"/>
+
+  <!-- ============ MAIN PIPELINE ============ -->
+  <!-- Box 1: Metadata Parser Agent (deterministic) -->
+  <rect x="470" y="225" width="460" height="75" rx="8" fill="#E1F5E7" stroke="#2FA35F" stroke-width="2"/>
+  <text x="700" y="257" text-anchor="middle" font-size="16" font-weight="700" fill="#155C32">1&#160;&#160;Metadata Parser Agent</text>
+  <text x="700" y="279" text-anchor="middle" font-size="12" fill="#155C32">model &#8594; tables &#183; relationships &#183; measures</text>
+
+  <line x1="700" y1="300" x2="700" y2="340" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+
+  <!-- Box 2: DAX / KPI Agent (LLM) -->
+  <rect x="470" y="340" width="460" height="75" rx="8" fill="#E3ECFC" stroke="#3568D4" stroke-width="2"/>
+  <text x="700" y="372" text-anchor="middle" font-size="16" font-weight="700" fill="#1D3B78">2&#160;&#160;DAX / KPI Agent</text>
+  <text x="700" y="394" text-anchor="middle" font-size="12" fill="#1D3B78">interpret DAX formulas &#183; suggest new KPIs</text>
+
+  <line x1="700" y1="415" x2="700" y2="455" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+
+  <!-- Box 3: Content Agents (LLM) -->
+  <rect x="470" y="455" width="460" height="80" rx="8" fill="#E3ECFC" stroke="#3568D4" stroke-width="2"/>
+  <text x="700" y="487" text-anchor="middle" font-size="16" font-weight="700" fill="#1D3B78">3&#160;&#160;Content Agents</text>
+  <text x="700" y="509" text-anchor="middle" font-size="12" fill="#1D3B78">drafts BRD &#183; FRD &#183; Dictionary &#183; Mapping</text>
+
+  <line x1="700" y1="535" x2="700" y2="575" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+
+  <!-- Box 4: Document Generator (deterministic) -->
+  <rect x="470" y="575" width="460" height="75" rx="8" fill="#E1F5E7" stroke="#2FA35F" stroke-width="2"/>
+  <text x="700" y="607" text-anchor="middle" font-size="16" font-weight="700" fill="#155C32">4&#160;&#160;Document Generator</text>
+  <text x="700" y="629" text-anchor="middle" font-size="12" fill="#155C32">docgen.py &#8594; real .docx / .xlsx files</text>
+
+  <!-- ============ SIDE BOXES ============ -->
+  <rect x="100" y="340" width="260" height="195" rx="8" fill="#E3ECFC" stroke="#3568D4" stroke-width="2"/>
+  <text x="230" y="372" text-anchor="middle" font-size="15" font-weight="700" fill="#1D3B78">LLM Brain</text>
+  <text x="230" y="392" text-anchor="middle" font-size="12" fill="#1D3B78">core/llm.py</text>
+  <text x="230" y="420" text-anchor="middle" font-size="11.5" fill="#1D3B78">&#8226; OpenAI &#183; Anthropic</text>
+  <text x="230" y="440" text-anchor="middle" font-size="11.5" fill="#1D3B78">&#8226; Groq &#183; Gemini</text>
+  <text x="230" y="460" text-anchor="middle" font-size="11.5" fill="#1D3B78">&#8226; BYOK, JSON output</text>
+  <text x="230" y="480" text-anchor="middle" font-size="11.5" fill="#1D3B78">&#8226; temperature = 0</text>
+
+  <rect x="1040" y="340" width="260" height="195" rx="8" fill="#EEEEF3" stroke="#74748A" stroke-width="2"/>
+  <text x="1170" y="372" text-anchor="middle" font-size="15" font-weight="700" fill="#35354A">Orchestrator</text>
+  <text x="1170" y="392" text-anchor="middle" font-size="12" fill="#35354A">core/pipeline.py</text>
+  <text x="1170" y="420" text-anchor="middle" font-size="11.5" fill="#35354A">Runs the 4 content</text>
+  <text x="1170" y="440" text-anchor="middle" font-size="11.5" fill="#35354A">agents in sequence,</text>
+  <text x="1170" y="460" text-anchor="middle" font-size="11.5" fill="#35354A">passing typed model +</text>
+  <text x="1170" y="480" text-anchor="middle" font-size="11.5" fill="#35354A">context between them</text>
+
+  <!-- LLM Brain dashed connectors -->
+  <line x1="360" y1="377" x2="470" y2="377" stroke="#3568D4" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrowBlue)"/>
+  <line x1="360" y1="495" x2="470" y2="495" stroke="#3568D4" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrowBlue)"/>
+
+  <!-- Orchestrator dashed connectors -->
+  <line x1="1040" y1="377" x2="930" y2="377" stroke="#74748A" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrowGrey)"/>
+  <line x1="1040" y1="495" x2="930" y2="495" stroke="#74748A" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrowGrey)"/>
+
+  <!-- ============ OUTPUT ROW ============ -->
+  <polyline points="700,650 700,690 140,690 140,730" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+  <polyline points="700,650 700,690 420,690 420,730" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+  <line x1="700" y1="650" x2="700" y2="730" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+  <polyline points="700,650 700,690 980,690 980,730" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+  <polyline points="930,400 950,400 950,705 1260,705 1260,730" fill="none" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+
+  <g>
+    <rect x="15" y="730" width="250" height="75" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="140" y="762" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">BRD.docx</text>
+    <text x="140" y="784" text-anchor="middle" font-size="12" fill="#7A5A15">Business Requirements</text>
+
+    <rect x="295" y="730" width="250" height="75" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="420" y="762" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">FRD.docx</text>
+    <text x="420" y="784" text-anchor="middle" font-size="12" fill="#7A5A15">Functional Requirements</text>
+
+    <rect x="575" y="730" width="250" height="75" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="700" y="762" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Dictionary.xlsx</text>
+    <text x="700" y="784" text-anchor="middle" font-size="12" fill="#7A5A15">Semantic definitions</text>
+
+    <rect x="855" y="730" width="250" height="75" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="980" y="762" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Mapping.xlsx</text>
+    <text x="980" y="784" text-anchor="middle" font-size="12" fill="#7A5A15">Integration report</text>
+
+    <rect x="1135" y="730" width="250" height="75" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="1260" y="762" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Suggested KPIs</text>
+    <text x="1260" y="784" text-anchor="middle" font-size="12" fill="#7A5A15">(in-app)</text>
+  </g>
+
+  <!-- ============ SECTION DIVIDER ============ -->
+  <line x1="15" y1="852" x2="1385" y2="852" stroke="#E2E2E8" stroke-width="1.5"/>
+  <text x="700" y="882" text-anchor="middle" font-size="15" font-weight="700" fill="#4A4A58">Live Schema Cross-Check &#8212; independent track, runs during platform selection</text>
+
+  <!-- ============ CROSS-CHECK ROW ============ -->
+  <g>
+    <rect x="15" y="905" width="320" height="70" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="175" y="935" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Target Platform</text>
+    <text x="175" y="957" text-anchor="middle" font-size="12" fill="#7A5A15">(selected above)</text>
+
+    <rect x="365" y="905" width="320" height="70" rx="8" fill="#E1F5E7" stroke="#2FA35F" stroke-width="2"/>
+    <text x="525" y="935" text-anchor="middle" font-size="15" font-weight="700" fill="#155C32">Platform Connector</text>
+    <text x="525" y="957" text-anchor="middle" font-size="12" fill="#155C32">Snowflake / Databricks / AWS SDK</text>
+
+    <rect x="715" y="905" width="320" height="70" rx="8" fill="#E1F5E7" stroke="#2FA35F" stroke-width="2"/>
+    <text x="875" y="935" text-anchor="middle" font-size="15" font-weight="700" fill="#155C32">Schema Cross-Check</text>
+    <text x="875" y="957" text-anchor="middle" font-size="12" fill="#155C32">fuzzy-match model &#8596; live catalog</text>
+
+    <rect x="1065" y="905" width="320" height="70" rx="8" fill="#FCEFD8" stroke="#D6A339" stroke-width="2"/>
+    <text x="1225" y="935" text-anchor="middle" font-size="15" font-weight="700" fill="#7A5A15">Cross-Check Report</text>
+    <text x="1225" y="957" text-anchor="middle" font-size="12" fill="#7A5A15">(in-app, pre-generation)</text>
+  </g>
+
+  <line x1="335" y1="940" x2="365" y2="940" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+  <line x1="685" y1="940" x2="715" y2="940" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+  <line x1="1035" y1="940" x2="1065" y2="940" stroke="#333333" stroke-width="2.5" marker-end="url(#arrowDark)"/>
+
+  <!-- ============ SUPABASE BAR ============ -->
+  <rect x="15" y="1010" width="1370" height="70" rx="8" fill="#F1E8FC" stroke="#8E5FCE" stroke-width="2"/>
+  <text x="700" y="1040" text-anchor="middle" font-size="16" font-weight="700" fill="#4B2A78">Supabase</text>
+  <text x="700" y="1062" text-anchor="middle" font-size="12.5" fill="#4B2A78">auth &#183; encrypted credentials &#183; project &amp; document persistence &#183; file storage</text>
+</svg>
