@@ -21,9 +21,12 @@ BRD, FRD, and semantic-layer documentation for analytics solutions is usually wr
 
 ## How it works
 
-```
-Semantic model (upload / paste)  ──┐
-                                    ├──▶  Business context (chat) ──▶  Target platform  ──▶  Agent pipeline  ──▶  BRD · FRD · Data Dictionary · Integration Mapping
+```mermaid
+flowchart LR
+    A["Semantic model\nupload / paste"] --> B["Business context\n(chat)"]
+    B --> C["Target platform\nSnowflake / Databricks / AWS"]
+    C --> D["Agent pipeline\n5 specialized agents"]
+    D --> E["BRD · FRD · Dictionary\nIntegration Mapping"]
 ```
 
 The agent pipeline runs five specialized agents in sequence: DAX/KPI interpretation, BRD drafting, FRD drafting, semantic dictionary generation, and platform mapping — each grounded in the same parsed model and business context.
