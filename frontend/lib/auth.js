@@ -1,8 +1,9 @@
 // supabase auth boundary, loaded via cdn esm since there's no bundler here
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// public anon key, safe to ship client-side — access is bounded by Supabase RLS policies, not this key
 const SUPABASE_URL = "https://zhrtrcafpkxnsgjponmg.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpocnRyY2FmcGt4bnNnanBvbm1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjMyNDAsImV4cCI6MjEwMzQ5OTI0MH0._v3d_mO85gAFfKc_bdEguqg9EdGVxNPVN29Hp99aM_Q";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpocnRyY2FmcGt4bnNnanBvbm1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc5MjMyNDAsImV4cCI6MjEwMzQ5OTI0MH0._v3d_mO85gAFfKc_bdEguqg9EdGVxNPVN29Hp99aM_Q"; // ggignore
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 

@@ -1,0 +1,5 @@
+version: 2
+secret:
+  ignored-matches:
+    - name: Supabase anon/public key (frontend/lib/auth.js)
+      match: 2b7303d88ac33fc0122ae8ec3e6b810ac575ba5840783dceac36a175960f721b
